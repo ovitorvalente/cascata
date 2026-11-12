@@ -17,7 +17,8 @@ qualidade, e o arquivo é salvo na pasta escolhida.
   o escolhido nas preferências
 - Download em segundo plano: fechar a janela não interrompe o download, e uma
   notificação avisa quando ele termina
-- Ícone opcional na bandeja do sistema
+- Ícone opcional na bandeja do sistema, que mostra a porcentagem do download
+- Painel de detalhes com gráfico de velocidade, tamanhos e tempos
 
 ## Como a instalação das dependências funciona
 
@@ -91,10 +92,28 @@ O menu principal tem a opção **Preferências** (`Ctrl+,`), com:
   download, o app continua rodando, avisa por notificação quando termina e
   então encerra. Abrir o Cascata de novo traz a janela de volta.
 - **Ícone na bandeja:** mantém o Cascata na bandeja depois que a janela é
-  fechada, com menu para abrir, cancelar o download e sair.
+  fechada. Durante um download o ícone vira um anel de progresso com a
+  porcentagem; ao terminar, mostra por alguns segundos se deu certo ou não.
+  O menu traz o título, uma barra de progresso, tamanho baixado, velocidade,
+  tempo restante, etapa, formato e pasta, além de abrir a janela, ver os
+  detalhes, cancelar, mostrar o último arquivo na pasta e sair.
 
 As configurações ficam em `~/.config/cascata/settings.ini`. `Ctrl+W` fecha a
 janela e `Ctrl+Q` encerra o app mesmo com a bandeja ativa.
+
+### Detalhes do download
+
+O item **Detalhes do download**, no menu principal e no menu da bandeja, abre
+um painel com a miniatura e o título do vídeo, um anel de progresso, o
+gráfico de velocidade ao longo do tempo (vídeo e áudio em cores diferentes;
+passe o cursor para ver cada ponto) e os números: tamanho, velocidade atual,
+média e máxima, tempo restante e decorrido, formato, pasta e posição na
+playlist. O mesmo gráfico aparece, menor, na janela principal.
+
+O painel é uma janela comum: no Wayland o aplicativo não escolhe onde ela
+abre, então ela não fica presa ao ícone da bandeja. O menu da bandeja é
+desenhado pelo GNOME e só aceita texto e ícones pequenos; por isso o gráfico
+fica no painel.
 
 ### Bandeja no GNOME
 
@@ -160,6 +179,9 @@ src/i18n.rs        configuração do gettext
 src/settings.rs    configurações salvas em ~/.config/cascata/settings.ini
 src/preferences.rs diálogo de preferências
 src/tray.rs        ícone de bandeja e extensão do GNOME Shell
+src/stats.rs       estado do download e formatação dos números
+src/charts.rs      gráfico de velocidade, anel de progresso e ícone da bandeja
+src/details.rs     painel de detalhes do download
 src/downloader.rs  executa o yt-dlp e traduz a saída em eventos
 src/deps.rs        detecção e instalação do yt-dlp e do FFmpeg
 src/config.rs      ID, nome e endereços do projeto
