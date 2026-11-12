@@ -13,7 +13,11 @@ qualidade, e o arquivo é salvo na pasta escolhida.
 - Progresso, velocidade e tempo restante; cancelamento a qualquer momento
 - Se o yt-dlp ou o FFmpeg não estiverem instalados, o app oferece instalar
   (Fedora e Ubuntu)
-- Interface em português (Brasil) e inglês, conforme o idioma do sistema
+- Interface em português (Brasil) e inglês, conforme o idioma do sistema ou
+  o escolhido nas preferências
+- Download em segundo plano: fechar a janela não interrompe o download, e uma
+  notificação avisa quando ele termina
+- Ícone opcional na bandeja do sistema
 
 ## Como a instalação das dependências funciona
 
@@ -76,11 +80,41 @@ detectado automaticamente; escolha o runtime **Host** (ou um toolbox com os
 pacotes acima) e use **Executar**. O app precisa rodar fora do sandbox do
 Flatpak para enxergar o `yt-dlp`/`ffmpeg` do sistema e para instalar pacotes.
 
+## Preferências
+
+O menu principal tem a opção **Preferências** (`Ctrl+,`), com:
+
+- **Idioma:** padrão do sistema, English ou Português (Brasil). Vale a partir
+  da próxima abertura do app.
+- **Downloads:** formato, qualidade e pasta de destino pré-selecionados.
+- **Continuar baixando em segundo plano:** ao fechar a janela durante um
+  download, o app continua rodando, avisa por notificação quando termina e
+  então encerra. Abrir o Cascata de novo traz a janela de volta.
+- **Ícone na bandeja:** mantém o Cascata na bandeja depois que a janela é
+  fechada, com menu para abrir, cancelar o download e sair.
+
+As configurações ficam em `~/.config/cascata/settings.ini`. `Ctrl+W` fecha a
+janela e `Ctrl+Q` encerra o app mesmo com a bandeja ativa.
+
+### Bandeja no GNOME
+
+O GNOME não mostra ícones de bandeja por conta própria; é preciso a extensão
+[AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/).
+No Ubuntu uma variante dela já vem ativada. No Fedora, ao ligar a opção o
+Cascata oferece instalar e ativar a extensão: o pedido é feito ao GNOME Shell,
+que mostra o próprio diálogo de confirmação e baixa a extensão de
+extensions.gnome.org. Se a extensão for desligada depois, o app continua
+funcionando, só sem o ícone.
+
+As notificações do sistema dependem de o app estar instalado (o GNOME as
+associa ao arquivo `.desktop`).
+
 ## Idiomas
 
 A interface usa o gettext. As mensagens no código estão em inglês, que é o
 idioma padrão; a tradução para o português do Brasil fica em `po/pt_BR.po`.
-O idioma segue o do sistema. Para testar outro:
+O idioma segue o do sistema, a menos que outro seja escolhido nas
+preferências. Para testar pelo terminal:
 
 ```bash
 LANGUAGE=pt_BR cascata
@@ -123,6 +157,9 @@ src/main.rs        aplicação (adw::Application)
 src/window.rs      janela e interface (libadwaita)
 src/about.rs       diálogo "Sobre" e informações de depuração
 src/i18n.rs        configuração do gettext
+src/settings.rs    configurações salvas em ~/.config/cascata/settings.ini
+src/preferences.rs diálogo de preferências
+src/tray.rs        ícone de bandeja e extensão do GNOME Shell
 src/downloader.rs  executa o yt-dlp e traduz a saída em eventos
 src/deps.rs        detecção e instalação do yt-dlp e do FFmpeg
 src/config.rs      ID, nome e endereços do projeto
