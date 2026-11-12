@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.cascata.Cascata</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Cascata</name>
+  <summary>Download videos and audio from the internet</summary>
+  <summary xml:lang="pt-BR">Baixe vídeos e áudios da internet</summary>
+
+  <description>
+    <p>
+      Cascata is a simple GNOME front end for yt-dlp and FFmpeg. Paste an
+      address, pick the format and quality, and the file lands in the folder
+      you chose.
+    </p>
+    <p xml:lang="pt-BR">
+      O Cascata é uma interface simples do GNOME para o yt-dlp e o FFmpeg.
+      Cole um endereço, escolha o formato e a qualidade, e o arquivo é salvo
+      na pasta escolhida.
+    </p>
+    <ul>
+      <li>Video in MP4 with a maximum resolution of your choice</li>
+      <li xml:lang="pt-BR">Vídeo em MP4 com a resolução máxima que você escolher</li>
+      <li>Audio only, converted to MP3</li>
+      <li xml:lang="pt-BR">Somente áudio, convertido para MP3</li>
+      <li>Whole playlists</li>
+      <li xml:lang="pt-BR">Playlists inteiras</li>
+      <li>Installs yt-dlp and FFmpeg for you on Fedora and Ubuntu</li>
+      <li xml:lang="pt-BR">Instala o yt-dlp e o FFmpeg para você no Fedora e no Ubuntu</li>
+    </ul>
+  </description>
+
+  <developer id="io.github.cascata">
+    <name>Cascata contributors</name>
+  </developer>
+
+  <launchable type="desktop-id">io.github.cascata.Cascata.desktop</launchable>
+  <url type="homepage">https://github.com/cascata/cascata</url>
+
+  <provides>
+    <binary>cascata</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-11-12">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Cascata
+GenericName=Video Downloader
+GenericName[pt_BR]=Baixador de vídeos
+Comment=Download videos and audio from the internet
+Comment[pt_BR]=Baixe vídeos e áudios da internet
+Exec=cascata
+Icon=io.github.cascata.Cascata
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;Network;AudioVideo;
+Keywords=video;audio;download;youtube;mp3;mp4;baixar;
+StartupNotify=true
