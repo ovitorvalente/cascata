@@ -3,21 +3,24 @@
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use adw::prelude::*;
 use gtk::glib::clone;
-use gtk::{gio, glib};
+use gtk::{gdk, gio, glib};
 
 use gettextrs::{gettext, ngettext};
 
 use crate::about;
+use crate::charts;
 use crate::config;
 use crate::deps;
+use crate::details;
 use crate::downloader::{self, Event, Kind, Outcome, Request};
 use crate::i18n::fill;
 use crate::preferences;
 use crate::settings::Settings;
+use crate::stats::{self, Phase, Session};
 use crate::tray;
 
 /// Alturas máximas do seletor de qualidade; `None` = melhor disponível.
@@ -74,18 +77,25 @@ pub(crate) struct Ui {
     progress_bar: gtk::ProgressBar,
     title_label: gtk::Label,
     status_label: gtk::Label,
+    chart: gtk::DrawingArea,
 
     folder: RefCell<PathBuf>,
     job: RefCell<Option<downloader::Handle>>,
-    last_file: RefCell<Option<String>>,
+    /// Estado do download atual, compartilhado com os gráficos.
+    pub(crate) session: Rc<RefCell<Session>>,
+    pub(crate) details: RefCell<Option<details::Details>>,
+    pub(crate) thumbnail: RefCell<Option<gdk::Texture>>,
     pulsing: Cell<bool>,
     installing: Cell<bool>,
 
     pub(crate) settings: RefCell<Settings>,
     tray: RefCell<Option<tray::Tray>>,
     tray_commands: async_channel::Sender<tray::Command>,
-    /// Último estado enviado à bandeja, para não repetir atualizações.
-    tray_status: RefCell<(bool, String)>,
+    /// Fase e porcentagem da última atualização enviada à bandeja.
+    tray_key: Cell<Option<(Phase, Option<u8>, bool)>>,
+    tray_pushed: Cell<Option<Instant>>,
+    /// Mostra por alguns segundos o ícone de concluído ou de falha.
+    tray_flash: Cell<bool>,
     /// Se o aviso de "continua em segundo plano" já foi mostrado.
     background_notified: Cell<bool>,
 }
@@ -100,6 +110,10 @@ pub fn build(app: &adw::Application) {
     menu.append(
         Some(gettext("Check dependencies").as_str()),
         Some("win.check-deps"),
+    );
+    menu.append(
+        Some(gettext("Download details").as_str()),
+        Some("win.details"),
     );
     menu.append(Some(gettext("About Cascata").as_str()), Some("win.about"));
 
@@ -191,9 +205,14 @@ pub fn build(app: &adw::Application) {
         .spacing(8)
         .visible(false)
         .build();
+    let session = Rc::new(RefCell::new(Session::default()));
+    let chart = charts::speed_chart(&session, 110);
+    chart.set_margin_top(4);
+
     progress_box.append(&title_label);
     progress_box.append(&progress_bar);
     progress_box.append(&status_label);
+    progress_box.append(&chart);
 
     // --- Botões ----------------------------------------------------------
     let download_button = gtk::Button::builder()
@@ -272,15 +291,20 @@ pub fn build(app: &adw::Application) {
         progress_bar,
         title_label,
         status_label,
+        chart,
         folder: RefCell::new(PathBuf::new()),
         job: RefCell::new(None),
-        last_file: RefCell::new(None),
+        session,
+        details: RefCell::new(None),
+        thumbnail: RefCell::new(None),
         pulsing: Cell::new(false),
         installing: Cell::new(false),
         settings: RefCell::new(settings),
         tray: RefCell::new(None),
         tray_commands,
-        tray_status: RefCell::new((false, String::new())),
+        tray_key: Cell::new(None),
+        tray_pushed: Cell::new(None),
+        tray_flash: Cell::new(false),
         background_notified: Cell::new(false),
     });
     apply_download_defaults(&ui);
@@ -331,13 +355,7 @@ pub fn build(app: &adw::Application) {
     ui.cancel_button.connect_clicked(clone!(
         #[weak]
         ui,
-        move |button| {
-            if let Some(job) = ui.job.borrow().as_ref() {
-                button.set_sensitive(false);
-                ui.status_label.set_text(&gettext("Cancelling…"));
-                job.cancel();
-            }
-        }
+        move |_| cancel_download(&ui)
     ));
 
     ui.banner.connect_button_clicked(clone!(
@@ -356,6 +374,7 @@ pub fn build(app: &adw::Application) {
         move |window| {
             let busy = ui.job.borrow().is_some();
             let in_tray = ui.tray.borrow().is_some();
+            release_focus(&ui);
             if in_tray || (busy && ui.settings.borrow().background) {
                 window.set_visible(false);
                 if busy && !in_tray && !ui.background_notified.replace(true) {
@@ -372,6 +391,8 @@ pub fn build(app: &adw::Application) {
             if let Some(job) = ui.job.borrow().as_ref() {
                 job.cancel();
             }
+            // A janela principal vai ser destruída; o painel vai junto.
+            destroy_details(&ui);
             glib::Propagation::Proceed
         }
     ));
@@ -392,6 +413,21 @@ pub fn build(app: &adw::Application) {
         move |_, _| preferences::show(&ui)
     ));
     ui.window.add_action(&preferences_action);
+
+    let details_action = gio::SimpleAction::new("details", None);
+    details_action.connect_activate(clone!(
+        #[weak]
+        ui,
+        move |_, _| details::show(&ui)
+    ));
+    ui.window.add_action(&details_action);
+
+    // As cores do gráfico mudam com o tema.
+    adw::StyleManager::default().connect_dark_notify(clone!(
+        #[weak]
+        ui,
+        move |_| ui.chart.queue_draw()
+    ));
 
     // Fechar pela ação (Ctrl+W) passa pelo mesmo caminho do botão de fechar.
     let close_action = gio::SimpleAction::new("close", None);
@@ -445,11 +481,9 @@ pub fn build(app: &adw::Application) {
             };
             match command {
                 tray::Command::Show => present(&ui),
-                tray::Command::CancelDownload => {
-                    if let Some(job) = ui.job.borrow().as_ref() {
-                        job.cancel();
-                    }
-                }
+                tray::Command::ShowDetails => details::show(&ui),
+                tray::Command::ShowLastFile => show_last_file(&ui),
+                tray::Command::CancelDownload => cancel_download(&ui),
                 tray::Command::Quit => quit(&ui),
             }
         }
@@ -472,9 +506,11 @@ pub fn build(app: &adw::Application) {
     refresh_deps(&ui);
     ui.window.present();
 
-    // A janela mantém a `Ui` viva; ao ser destruída, a `Ui` é liberada.
+    // O aplicativo mantém a `Ui` viva até encerrar. (O sinal "destroy" da
+    // janela não serve para isso: no GTK 4 ele só dispara depois que a
+    // última referência à janela é liberada.)
     let keep_alive = RefCell::new(Some(ui.clone()));
-    ui.window.connect_destroy(move |_| {
+    app.connect_shutdown(move |_| {
         keep_alive.borrow_mut().take();
     });
 }
@@ -494,7 +530,28 @@ fn quit(ui: &Ui) {
         job.cancel();
     }
     ui.tray.replace(None);
+    destroy_windows(ui);
+}
+
+/// Fecha o painel de detalhes de vez. Ele é uma janela do aplicativo: se
+/// continuasse existindo, o aplicativo não encerraria.
+fn destroy_details(ui: &Ui) {
+    if let Some(details) = ui.details.take() {
+        details.window.destroy();
+    }
+}
+
+/// Destrói todas as janelas, o que encerra o aplicativo.
+fn destroy_windows(ui: &Ui) {
+    destroy_details(ui);
+    release_focus(ui);
     ui.window.destroy();
+}
+
+/// Tira o foco do campo de endereço. Sem isso, o GTK reclama quando o
+/// campo é desativado, ou a janela destruída, com ele ainda em foco.
+fn release_focus(ui: &Ui) {
+    gtk::prelude::GtkWindowExt::set_focus(&ui.window, gtk::Widget::NONE);
 }
 
 /// Envia uma notificação do sistema; clicar nela mostra a janela.
@@ -532,9 +589,7 @@ pub(crate) async fn start_tray(ui: &Rc<Ui>) -> Result<(), String> {
     }
     let tray = tray::Tray::start(ui.tray_commands.clone()).await?;
     ui.tray.replace(Some(tray));
-    // Força o envio do estado atual ao ícone recém-criado.
-    let (busy, status) = ui.tray_status.replace((false, String::new()));
-    set_tray_status(ui, busy, &status);
+    refresh_tray(ui, true);
     Ok(())
 }
 
@@ -547,16 +602,154 @@ pub(crate) fn stop_tray(ui: &Ui) {
     }
 }
 
-/// Atualiza o estado mostrado no menu da bandeja.
-fn set_tray_status(ui: &Ui, busy: bool, status: &str) {
-    let state = (busy, status.to_string());
-    if *ui.tray_status.borrow() == state {
+/// Nome curto de uma pasta para exibição: "~/Vídeos" em vez do caminho
+/// completo dentro da pasta pessoal.
+fn display_folder(folder: &std::path::Path) -> String {
+    match folder.strip_prefix(glib::home_dir()) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Ok(rest) => format!("~/{}", rest.to_string_lossy()),
+        Err(_) => folder.to_string_lossy().into_owned(),
+    }
+}
+
+/// Encurta um texto para caber em uma linha de menu.
+fn shorten(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        text.to_string()
+    } else {
+        let head: String = text.chars().take(limit.saturating_sub(1)).collect();
+        format!("{}…", head.trim_end())
+    }
+}
+
+/// Monta o que a bandeja deve mostrar para o estado atual.
+fn tray_view(ui: &Ui) -> tray::View {
+    let session = ui.session.borrow();
+    let percent = session.percent();
+
+    let icon = match session.phase {
+        Phase::Starting => Some(charts::TrayIcon::Busy),
+        Phase::Downloading => {
+            Some(percent.map_or(charts::TrayIcon::Busy, charts::TrayIcon::Progress))
+        }
+        Phase::Processing => Some(charts::TrayIcon::Progress(100)),
+        Phase::Done if ui.tray_flash.get() => Some(charts::TrayIcon::Done),
+        Phase::Failed if ui.tray_flash.get() => Some(charts::TrayIcon::Failed),
+        _ => None,
+    };
+
+    let mut lines = Vec::new();
+    let mut summary = String::new();
+    if session.phase.is_active() {
+        if !session.info.title.is_empty() {
+            lines.push(shorten(&session.info.title, 48));
+        }
+        match (session.phase, session.progress.as_ref()) {
+            (Phase::Downloading, Some(progress)) => {
+                let percent = percent.unwrap_or(0);
+                lines.push(format!(
+                    "{} {percent}%",
+                    stats::text_bar(progress.fraction, 12)
+                ));
+                let mut numbers = vec![stats::size_text(progress)];
+                let rate = stats::rate_text(progress);
+                if !rate.is_empty() {
+                    numbers.push(rate.clone());
+                }
+                lines.push(numbers.join(" · "));
+                summary = format!("{percent}%");
+                if !rate.is_empty() {
+                    summary = format!("{summary} · {rate}");
+                }
+            }
+            _ => summary = session.activity(),
+        }
+        let mut activity = session.activity();
+        if let Some(playlist) = session.playlist_text() {
+            activity = format!("{activity} · {playlist}");
+        }
+        lines.push(activity);
+        lines.push(format!("{} → {}", session.format, session.folder));
+    }
+
+    tray::View {
+        icon: icon.map(charts::tray_icon).unwrap_or_default(),
+        summary,
+        sparkline: if session.phase == Phase::Downloading {
+            charts::sparkline_png(&session.samples)
+        } else {
+            Vec::new()
+        },
+        lines,
+        can_cancel: session.phase.is_active(),
+        last_file: session.last_file.as_ref().map(|path| {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.clone());
+            shorten(&name, 40)
+        }),
+    }
+}
+
+/// Atualiza o ícone e o menu da bandeja. Fora de mudanças de fase ou de
+/// porcentagem, envia no máximo uma atualização por segundo.
+fn refresh_tray(ui: &Ui, force: bool) {
+    if ui.tray.borrow().is_none() {
         return;
     }
-    if let Some(tray) = ui.tray.borrow().as_ref() {
-        tray.set_status(busy, status);
+    let key = {
+        let session = ui.session.borrow();
+        (session.phase, session.percent(), ui.tray_flash.get())
+    };
+    let recent = ui
+        .tray_pushed
+        .get()
+        .is_some_and(|pushed| pushed.elapsed() < Duration::from_secs(1));
+    if !force && ui.tray_key.get() == Some(key) && recent {
+        return;
     }
-    ui.tray_status.replace(state);
+    let view = tray_view(ui);
+    if let Some(tray) = ui.tray.borrow().as_ref() {
+        tray.set_view(view);
+    }
+    ui.tray_key.set(Some(key));
+    ui.tray_pushed.set(Some(Instant::now()));
+}
+
+/// Cancela o download em andamento, se houver.
+pub(crate) fn cancel_download(ui: &Ui) {
+    if let Some(job) = ui.job.borrow().as_ref() {
+        ui.cancel_button.set_sensitive(false);
+        ui.status_label.set_text(&gettext("Cancelling…"));
+        job.cancel();
+    }
+}
+
+/// Mostra o último arquivo concluído no gerenciador de arquivos.
+pub(crate) fn show_last_file(ui: &Ui) {
+    let Some(path) = ui.session.borrow().last_file.clone() else {
+        return;
+    };
+    let parent = ui.window.is_visible().then_some(&ui.window);
+    gtk::FileLauncher::new(Some(&gio::File::for_path(path))).open_containing_folder(
+        parent,
+        gio::Cancellable::NONE,
+        |_| {},
+    );
+}
+
+/// Indica se há alguma janela do aplicativo na tela.
+fn on_screen(ui: &Ui) -> bool {
+    ui.window.is_visible() || details::is_visible(ui)
+}
+
+/// Encerra o aplicativo se não sobrou janela, bandeja nem download: nesse
+/// estado ele ficaria rodando sem nenhuma forma de ser alcançado.
+pub(crate) fn quit_if_unattended(ui: &Ui) {
+    if !on_screen(ui) && ui.tray.borrow().is_none() && ui.job.borrow().is_none() {
+        destroy_windows(ui);
+    }
 }
 
 fn toast(ui: &Ui, message: &str) {
@@ -677,6 +870,10 @@ fn choose_folder(ui: &Rc<Ui>) {
 }
 
 fn set_busy(ui: &Ui, busy: bool) {
+    if busy {
+        // Um campo desativado com o foco nunca recebe a perda de foco.
+        release_focus(ui);
+    }
     ui.url_row.set_sensitive(!busy);
     ui.options.set_sensitive(!busy);
     ui.download_button.set_visible(!busy);
@@ -723,6 +920,11 @@ fn start_download(ui: &Rc<Ui>) {
         playlist: ui.playlist_row.is_active(),
         folder: ui.folder.borrow().clone(),
     };
+    let format = match kind {
+        Kind::Video => format!("MP4 · {}", quality_label(max_height)),
+        Kind::Audio => "MP3".to_string(),
+    };
+    let folder = display_folder(&request.folder);
 
     let (handle, events) = match downloader::start(request) {
         Ok(started) => started,
@@ -733,15 +935,18 @@ fn start_download(ui: &Rc<Ui>) {
     };
 
     ui.job.replace(Some(handle));
-    ui.last_file.replace(None);
+    ui.session.borrow_mut().begin(format, folder);
+    ui.tray_flash.set(false);
+    details::clear_thumbnail(ui);
     ui.pulsing.set(false);
     ui.title_label.set_text(&gettext("Fetching information…"));
     ui.status_label.set_text(&gettext("Connecting…"));
     ui.progress_bar.set_fraction(0.0);
     ui.progress_box.set_visible(true);
+    ui.chart.queue_draw();
     set_busy(ui, true);
     start_pulse(ui);
-    set_tray_status(ui, true, &gettext("Fetching information…"));
+    refresh_views(ui, true);
 
     let ui = ui.clone();
     glib::spawn_future_local(async move {
@@ -751,40 +956,55 @@ fn start_download(ui: &Rc<Ui>) {
     });
 }
 
+/// Atualiza o painel de detalhes, o gráfico da janela e a bandeja.
+fn refresh_views(ui: &Ui, force: bool) {
+    ui.chart.queue_draw();
+    details::refresh(ui);
+    refresh_tray(ui, force);
+}
+
 fn handle_event(ui: &Rc<Ui>, event: Event) {
     match event {
-        Event::Title(title) => ui.title_label.set_text(&title),
-        Event::Progress {
-            fraction,
-            speed,
-            eta,
-        } => {
+        Event::Info(info) => {
+            ui.title_label.set_text(&info.title);
+            let thumbnail = info.thumbnail.clone();
+            ui.session.borrow_mut().set_info(info);
+            details::clear_thumbnail(ui);
+            if let Some(url) = thumbnail {
+                details::load_thumbnail(ui, url);
+            }
+            refresh_views(ui, true);
+        }
+        Event::Progress(progress) => {
             ui.pulsing.set(false);
-            ui.progress_bar.set_fraction(fraction);
-            let percent = format!("{:.0}", fraction * 100.0);
-            let mut text = fill(
-                &gettext("Downloading — {percent}%"),
-                &[("percent", &percent)],
-            );
-            // A bandeja recebe só a porcentagem, que muda poucas vezes.
-            set_tray_status(ui, true, &text);
-            if !speed.is_empty() {
-                text.push_str(&format!(" · {speed}"));
+            ui.progress_bar.set_fraction(progress.fraction);
+
+            let percent = format!("{:.0}", (progress.fraction * 100.0).floor());
+            let mut parts = vec![
+                fill(
+                    &gettext("Downloading — {percent}%"),
+                    &[("percent", &percent)],
+                ),
+                stats::size_text(&progress),
+            ];
+            let rate = stats::rate_text(&progress);
+            if !rate.is_empty() {
+                parts.push(rate);
             }
-            if !eta.is_empty() {
-                text.push_str(" · ");
-                text.push_str(&fill(&gettext("{time} left"), &[("time", &eta)]));
-            }
-            ui.status_label.set_text(&text);
+            ui.status_label.set_text(&parts.join(" · "));
+
+            ui.session.borrow_mut().record(progress);
+            refresh_views(ui, false);
         }
         Event::PostProcessing => {
             ui.status_label
                 .set_text(&gettext("Processing with FFmpeg…"));
             start_pulse(ui);
-            set_tray_status(ui, true, &gettext("Processing with FFmpeg…"));
+            ui.session.borrow_mut().phase = Phase::Processing;
+            refresh_views(ui, true);
         }
         Event::File(path) => {
-            ui.last_file.replace(Some(path));
+            ui.session.borrow_mut().last_file = Some(path);
         }
         Event::Finished(outcome) => finish(ui, outcome),
     }
@@ -795,12 +1015,35 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
     ui.pulsing.set(false);
     set_busy(ui, false);
     refresh_deps(ui);
-    set_tray_status(ui, false, "");
 
-    // Com a janela escondida ou fora de foco, o resultado vai também para
-    // uma notificação do sistema.
-    let hidden = !ui.window.is_visible();
-    let unattended = hidden || !ui.window.is_active();
+    ui.session.borrow_mut().finish(match outcome {
+        Outcome::Done => Phase::Done,
+        Outcome::Cancelled => Phase::Cancelled,
+        Outcome::Failed(_) => Phase::Failed,
+    });
+    // O ícone da bandeja mostra o resultado por alguns segundos.
+    if outcome != Outcome::Cancelled {
+        ui.tray_flash.set(true);
+        glib::timeout_add_local_once(
+            Duration::from_secs(6),
+            clone!(
+                #[weak]
+                ui,
+                move || {
+                    if !ui.session.borrow().phase.is_active() {
+                        ui.tray_flash.set(false);
+                        refresh_tray(&ui, true);
+                    }
+                }
+            ),
+        );
+    }
+    refresh_views(ui, true);
+
+    // Sem nenhuma janela na tela ou com a principal fora de foco, o
+    // resultado vai também para uma notificação do sistema.
+    let hidden = !on_screen(ui);
+    let unattended = !ui.window.is_visible() || !ui.window.is_active();
     if let Some(app) = ui.window.application() {
         app.withdraw_notification(NOTIFICATION_BACKGROUND);
     }
@@ -821,19 +1064,12 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
             }
 
             let done = adw::Toast::new(&gettext("Download finished"));
-            if let Some(path) = ui.last_file.borrow().clone() {
+            if ui.session.borrow().last_file.is_some() {
                 done.set_button_label(Some(&gettext("Show in folder")));
                 done.connect_button_clicked(clone!(
                     #[weak]
                     ui,
-                    move |_| {
-                        gtk::FileLauncher::new(Some(&gio::File::for_path(&path)))
-                            .open_containing_folder(
-                                Some(&ui.window),
-                                gio::Cancellable::NONE,
-                                |_| {},
-                            );
-                    }
+                    move |_| show_last_file(&ui)
                 ));
             }
             ui.toasts.add_toast(done);
@@ -853,25 +1089,21 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
                     &message,
                 );
             }
-            if !hidden {
+            if ui.window.is_visible() {
                 show_error(ui, &gettext("The download failed"), &message);
             }
         }
     }
 
-    // Escondido e sem bandeja, não há mais o que fazer em segundo plano. A
+    // Sem janela e sem bandeja, não há mais o que fazer em segundo plano. A
     // pequena espera dá tempo de a notificação ser entregue.
-    if hidden && ui.tray.borrow().is_none() {
+    if hidden {
         glib::timeout_add_local_once(
             Duration::from_millis(500),
             clone!(
                 #[weak]
                 ui,
-                move || {
-                    if !ui.window.is_visible() && ui.job.borrow().is_none() {
-                        ui.window.destroy();
-                    }
-                }
+                move || quit_if_unattended(&ui)
             ),
         );
     }

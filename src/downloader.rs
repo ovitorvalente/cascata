@@ -12,7 +12,7 @@ use std::thread;
 use gettextrs::gettext;
 
 const TAG_PROGRESS: &str = "CASCATA_DL|";
-const TAG_TITLE: &str = "CASCATA_TITLE|";
+const TAG_INFO: &str = "CASCATA_INFO|";
 const TAG_POST: &str = "CASCATA_PP|";
 const TAG_FILE: &str = "CASCATA_FILE|";
 
@@ -39,14 +39,46 @@ pub enum Outcome {
     Failed(String),
 }
 
+/// O que está sendo baixado no momento. Vídeo e áudio costumam vir em
+/// fluxos separados, baixados um depois do outro.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Video,
+    Audio,
+    /// Um único arquivo com vídeo e áudio.
+    Combined,
+}
+
+/// Dados do item, conhecidos antes de o download começar.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Info {
+    pub title: String,
+    pub thumbnail: Option<String>,
+    /// Posição e total, quando o item faz parte de uma playlist.
+    pub playlist: Option<(u32, u32)>,
+    /// Duração em segundos.
+    pub duration: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Progress {
+    /// Progresso do item inteiro (todos os fluxos), de 0 a 1.
+    pub fraction: f64,
+    /// Bytes já baixados do item inteiro.
+    pub downloaded: u64,
+    /// Tamanho total estimado do item, se conhecido.
+    pub total: Option<u64>,
+    /// Bytes por segundo.
+    pub speed: Option<f64>,
+    /// Segundos restantes do fluxo atual.
+    pub eta: Option<u64>,
+    pub stage: Stage,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
-    Title(String),
-    Progress {
-        fraction: f64,
-        speed: String,
-        eta: String,
-    },
+    Info(Info),
+    Progress(Progress),
     PostProcessing,
     File(String),
     Finished(Outcome),
@@ -80,9 +112,10 @@ fn build_args(req: &Request) -> Vec<String> {
         "never",
         "--no-warnings",
         "--progress-template",
-        "download:CASCATA_DL|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+        "download:CASCATA_DL|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(info.vcodec)s|%(info.acodec)s",
         "--print",
-        "before_dl:CASCATA_TITLE|%(title)s",
+        // O título vem por último porque pode conter "|".
+        "before_dl:CASCATA_INFO|%(playlist_index)s|%(n_entries)s|%(duration)s|%(filesize_approx)s|%(thumbnail)s|%(title)s",
         "--print",
         "post_process:CASCATA_PP|",
         "--print",
@@ -137,36 +170,160 @@ fn build_args(req: &Request) -> Vec<String> {
     args
 }
 
-fn parse_line(line: &str) -> Option<Event> {
+/// Uma linha da saída do yt-dlp, ainda sem o contexto das anteriores.
+#[derive(Debug, Clone, PartialEq)]
+enum Line {
+    Info {
+        info: Info,
+        /// Tamanho aproximado do item inteiro.
+        size: Option<u64>,
+    },
+    Progress {
+        /// Bytes baixados do fluxo atual.
+        downloaded: u64,
+        /// Tamanho do fluxo atual.
+        total: Option<u64>,
+        speed: Option<f64>,
+        eta: Option<u64>,
+        stage: Stage,
+    },
+    PostProcessing,
+    File(String),
+}
+
+/// O yt-dlp escreve "NA" (ou "None") quando não sabe um valor.
+fn number(field: &str) -> Option<f64> {
+    field
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite() && *value >= 0.0)
+}
+
+fn text(field: &str) -> Option<String> {
+    let field = field.trim();
+    (!field.is_empty() && field != "NA" && field != "None").then(|| field.to_string())
+}
+
+fn parse_line(line: &str) -> Option<Line> {
     let line = line.trim();
     if let Some(rest) = line.strip_prefix(TAG_PROGRESS) {
-        let mut parts = rest.split('|');
-        let percent = parts.next()?.trim().trim_end_matches('%').trim();
-        let fraction = (percent.parse::<f64>().ok()? / 100.0).clamp(0.0, 1.0);
-        let speed = clean_field(parts.next().unwrap_or(""));
-        let eta = clean_field(parts.next().unwrap_or(""));
-        Some(Event::Progress {
-            fraction,
-            speed,
-            eta,
+        let fields: Vec<&str> = rest.split('|').collect();
+        let field = |index: usize| fields.get(index).copied().unwrap_or("");
+
+        let downloaded = number(field(0))? as u64;
+        let total = number(field(1)).or_else(|| number(field(2)));
+        let has_video = text(field(5)).is_some_and(|codec| codec != "none");
+        let has_audio = text(field(6)).is_some_and(|codec| codec != "none");
+        let stage = match (has_video, has_audio) {
+            (true, false) => Stage::Video,
+            (false, true) => Stage::Audio,
+            _ => Stage::Combined,
+        };
+        Some(Line::Progress {
+            downloaded,
+            total: total.map(|total| total as u64),
+            speed: number(field(3)).filter(|speed| *speed > 0.0),
+            eta: number(field(4)).map(|eta| eta as u64),
+            stage,
         })
-    } else if let Some(rest) = line.strip_prefix(TAG_TITLE) {
-        Some(Event::Title(rest.to_string()))
+    } else if let Some(rest) = line.strip_prefix(TAG_INFO) {
+        let mut fields = rest.splitn(6, '|');
+        let index = fields.next().and_then(number);
+        let count = fields.next().and_then(number);
+        let duration = fields.next().and_then(number);
+        let size = fields.next().and_then(number);
+        let thumbnail = fields.next().and_then(text);
+        let title = fields.next().unwrap_or("").to_string();
+        let playlist = match (index, count) {
+            (Some(index), Some(count)) if count >= 1.0 => Some((index as u32, count as u32)),
+            _ => None,
+        };
+        Some(Line::Info {
+            info: Info {
+                title,
+                thumbnail,
+                playlist,
+                duration: duration.map(|duration| duration as u64),
+            },
+            size: size.map(|size| size as u64).filter(|size| *size > 0),
+        })
     } else if line.starts_with(TAG_POST) {
-        Some(Event::PostProcessing)
+        Some(Line::PostProcessing)
     } else {
         line.strip_prefix(TAG_FILE)
-            .map(|rest| Event::File(rest.to_string()))
+            .map(|rest| Line::File(rest.to_string()))
     }
 }
 
-/// O yt-dlp escreve "Unknown"/"NA" quando não sabe o valor.
-fn clean_field(value: &str) -> String {
-    let value = value.trim();
-    if value.is_empty() || value.contains("Unknown") || value == "NA" {
-        String::new()
-    } else {
-        value.to_string()
+/// Transforma o progresso de cada fluxo (vídeo, depois áudio) no progresso
+/// do item inteiro, para a porcentagem não voltar a zero entre os fluxos.
+#[derive(Debug, Default)]
+struct Tracker {
+    /// Tamanho aproximado do item inteiro, informado antes do download.
+    size: Option<u64>,
+    /// Bytes dos fluxos já concluídos.
+    finished: u64,
+    stream_downloaded: u64,
+    stream_total: u64,
+    stage: Option<Stage>,
+    fraction: f64,
+}
+
+impl Tracker {
+    fn event(&mut self, line: Line) -> Event {
+        match line {
+            Line::Info { info, size } => {
+                *self = Tracker {
+                    size,
+                    ..Tracker::default()
+                };
+                Event::Info(info)
+            }
+            Line::Progress {
+                downloaded,
+                total,
+                speed,
+                eta,
+                stage,
+            } => {
+                let new_stream = self.stage.is_some_and(|previous| previous != stage)
+                    || downloaded < self.stream_downloaded;
+                if new_stream {
+                    self.finished += self.stream_total.max(self.stream_downloaded);
+                }
+                self.stage = Some(stage);
+                self.stream_downloaded = downloaded;
+                self.stream_total = total.unwrap_or(downloaded).max(downloaded);
+
+                let done = self.finished + downloaded;
+                let known = self.finished + self.stream_total;
+                // O tamanho informado antes é só uma estimativa; nunca pode
+                // ser menor do que o que já se sabe dos fluxos.
+                let overall = match self.size {
+                    Some(size) => Some(size.max(known)),
+                    None => total.map(|_| known),
+                };
+                let fraction = match overall {
+                    Some(overall) if overall > 0 => (done as f64 / overall as f64).min(1.0),
+                    _ => 0.0,
+                };
+                // Sem estimativa do item inteiro, o total cresce quando o
+                // segundo fluxo começa; a porcentagem só não pode recuar.
+                self.fraction = self.fraction.max(fraction);
+
+                Event::Progress(Progress {
+                    fraction: self.fraction,
+                    downloaded: done,
+                    total: overall,
+                    speed,
+                    eta,
+                    stage,
+                })
+            }
+            Line::PostProcessing => Event::PostProcessing,
+            Line::File(path) => Event::File(path),
+        }
     }
 }
 
@@ -227,6 +384,7 @@ pub fn start(req: Request) -> io::Result<(Handle, async_channel::Receiver<Event>
             String::from_utf8_lossy(&bytes).into_owned()
         });
 
+        let mut tracker = Tracker::default();
         let mut reader = BufReader::new(stdout);
         let mut buffer = Vec::new();
         loop {
@@ -235,8 +393,8 @@ pub fn start(req: Request) -> io::Result<(Handle, async_channel::Receiver<Event>
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
                     let line = String::from_utf8_lossy(&buffer);
-                    if let Some(event) = parse_line(&line) {
-                        let _ = sender.send_blocking(event);
+                    if let Some(line) = parse_line(&line) {
+                        let _ = sender.send_blocking(tracker.event(line));
                     }
                 }
             }
@@ -274,49 +432,140 @@ mod tests {
         }
     }
 
-    #[test]
-    fn parses_progress() {
-        let event = parse_line("CASCATA_DL|  45.3%|   2.31MiB/s|00:12\n").unwrap();
+    fn progress(event: Event) -> Progress {
         match event {
-            Event::Progress {
-                fraction,
-                speed,
-                eta,
-            } => {
-                assert!((fraction - 0.453).abs() < 1e-9);
-                assert_eq!(speed, "2.31MiB/s");
-                assert_eq!(eta, "00:12");
-            }
+            Event::Progress(progress) => progress,
             other => panic!("evento inesperado: {other:?}"),
         }
     }
 
     #[test]
-    fn unknown_fields_become_empty() {
-        let event = parse_line("CASCATA_DL|100.0%|Unknown B/s|Unknown").unwrap();
+    fn parses_progress() {
+        // Linha real do yt-dlp para um fluxo só de vídeo.
+        let line = "CASCATA_DL|130048|223779|NA|6155748.18|0|av01.0.00M.08|none\n";
         assert_eq!(
-            event,
-            Event::Progress {
-                fraction: 1.0,
-                speed: String::new(),
-                eta: String::new()
+            parse_line(line),
+            Some(Line::Progress {
+                downloaded: 130048,
+                total: Some(223779),
+                speed: Some(6155748.18),
+                eta: Some(0),
+                stage: Stage::Video,
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_fields_become_none() {
+        let line = parse_line("CASCATA_DL|1024|NA|2048.5|NA|NA|none|opus").unwrap();
+        assert_eq!(
+            line,
+            Line::Progress {
+                downloaded: 1024,
+                // Sem o total exato, vale a estimativa.
+                total: Some(2048),
+                speed: None,
+                eta: None,
+                stage: Stage::Audio,
+            }
+        );
+        assert_eq!(parse_line("CASCATA_DL|NA|NA|NA|NA|NA|NA|NA"), None);
+    }
+
+    #[test]
+    fn parses_info() {
+        let line = "CASCATA_INFO|3|12|19|475961|https://example.com/t.jpg|Um vídeo | com barra";
+        assert_eq!(
+            parse_line(line),
+            Some(Line::Info {
+                info: Info {
+                    title: "Um vídeo | com barra".into(),
+                    thumbnail: Some("https://example.com/t.jpg".into()),
+                    playlist: Some((3, 12)),
+                    duration: Some(19),
+                },
+                size: Some(475961),
+            })
+        );
+
+        let single = parse_line("CASCATA_INFO|NA|NA|NA|NA|NA|Sem dados").unwrap();
+        assert_eq!(
+            single,
+            Line::Info {
+                info: Info {
+                    title: "Sem dados".into(),
+                    ..Info::default()
+                },
+                size: None,
             }
         );
     }
 
     #[test]
-    fn parses_other_events() {
-        assert_eq!(
-            parse_line("CASCATA_TITLE|Um vídeo | com barra"),
-            Some(Event::Title("Um vídeo | com barra".into()))
-        );
-        assert_eq!(parse_line("CASCATA_PP|"), Some(Event::PostProcessing));
+    fn parses_other_lines() {
+        assert_eq!(parse_line("CASCATA_PP|"), Some(Line::PostProcessing));
         assert_eq!(
             parse_line("CASCATA_FILE|/tmp/a.mp4"),
-            Some(Event::File("/tmp/a.mp4".into()))
+            Some(Line::File("/tmp/a.mp4".into()))
         );
         assert_eq!(parse_line("[download] qualquer coisa"), None);
-        assert_eq!(parse_line("CASCATA_DL|N/A|x|y"), None);
+    }
+
+    fn stream(downloaded: u64, total: u64, stage: Stage) -> Line {
+        Line::Progress {
+            downloaded,
+            total: Some(total),
+            speed: Some(1000.0),
+            eta: Some(1),
+            stage,
+        }
+    }
+
+    #[test]
+    fn tracks_overall_progress_across_streams() {
+        let mut tracker = Tracker::default();
+        tracker.event(Line::Info {
+            info: Info::default(),
+            size: Some(1000),
+        });
+
+        let video = progress(tracker.event(stream(300, 600, Stage::Video)));
+        assert_eq!(
+            (video.downloaded, video.total, video.fraction),
+            (300, Some(1000), 0.3)
+        );
+
+        progress(tracker.event(stream(600, 600, Stage::Video)));
+        // O áudio começa do zero, mas o item continua de onde estava.
+        let audio = progress(tracker.event(stream(200, 400, Stage::Audio)));
+        assert_eq!(
+            (audio.downloaded, audio.total, audio.fraction),
+            (800, Some(1000), 0.8)
+        );
+        let end = progress(tracker.event(stream(400, 400, Stage::Audio)));
+        assert_eq!(end.fraction, 1.0);
+    }
+
+    #[test]
+    fn progress_never_goes_backwards_without_an_estimate() {
+        let mut tracker = Tracker::default();
+        let video = progress(tracker.event(stream(600, 600, Stage::Video)));
+        assert_eq!(video.fraction, 1.0);
+        let audio = progress(tracker.event(stream(100, 400, Stage::Audio)));
+        assert_eq!(audio.fraction, 1.0);
+        assert_eq!((audio.downloaded, audio.total), (700, Some(1000)));
+    }
+
+    #[test]
+    fn a_new_item_resets_the_tracker() {
+        let mut tracker = Tracker::default();
+        progress(tracker.event(stream(600, 600, Stage::Combined)));
+        tracker.event(Line::Info {
+            info: Info::default(),
+            size: None,
+        });
+        let next = progress(tracker.event(stream(100, 400, Stage::Combined)));
+        assert_eq!((next.downloaded, next.fraction), (100, 0.25));
     }
 
     #[test]
@@ -353,14 +602,14 @@ mod tests {
         req.folder = folder.clone();
 
         let (_handle, events) = start(req).expect("yt-dlp precisa estar instalado");
-        let (mut title, mut progress, mut file, mut outcome) = (false, 0, None, None);
+        let (mut info, mut updates, mut file, mut outcome) = (None, Vec::new(), None, None);
         while let Ok(event) = events.recv_blocking() {
             match event {
-                Event::Title(t) => {
-                    println!("título: {t}");
-                    title = true;
+                Event::Info(i) => {
+                    println!("informações: {i:?}");
+                    info = Some(i);
                 }
-                Event::Progress { .. } => progress += 1,
+                Event::Progress(p) => updates.push(p),
                 Event::PostProcessing => println!("pós-processamento"),
                 Event::File(f) => {
                     println!("arquivo: {f}");
@@ -369,10 +618,23 @@ mod tests {
                 Event::Finished(o) => outcome = Some(o),
             }
         }
-        println!("eventos de progresso: {progress}");
+        println!("eventos de progresso: {}", updates.len());
+        if let Some(last) = updates.last() {
+            println!("último: {last:?}");
+        }
         assert_eq!(outcome, Some(Outcome::Done));
-        assert!(title, "o título deveria ter sido informado");
-        assert!(progress > 0, "deveria haver eventos de progresso");
+        assert!(!info
+            .expect("as informações deveriam ter chegado")
+            .title
+            .is_empty());
+        assert!(!updates.is_empty(), "deveria haver eventos de progresso");
+        assert!(
+            updates
+                .windows(2)
+                .all(|pair| pair[0].fraction <= pair[1].fraction),
+            "a porcentagem não pode recuar"
+        );
+        assert!(updates.last().unwrap().fraction > 0.9);
         let file = PathBuf::from(file.expect("o arquivo final deveria ter sido informado"));
         assert!(file.starts_with(&folder) && file.exists());
         let expected = if kind == Kind::Audio { "mp3" } else { "mp4" };

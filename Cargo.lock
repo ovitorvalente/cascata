@@ -222,6 +222,7 @@ name = "cascata"
 version = "0.1.0"
 dependencies = [
  "async-channel",
+ "cairo-rs",
  "gettext-rs",
  "gtk4",
  "ksni",

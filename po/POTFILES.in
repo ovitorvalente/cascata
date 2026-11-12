@@ -1,6 +1,9 @@
 src/about.rs
+src/charts.rs
 src/deps.rs
+src/details.rs
 src/downloader.rs
 src/preferences.rs
+src/stats.rs
 src/tray.rs
 src/window.rs

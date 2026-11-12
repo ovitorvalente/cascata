@@ -1,10 +1,13 @@
 mod about;
+mod charts;
 mod config;
 mod deps;
+mod details;
 mod downloader;
 mod i18n;
 mod preferences;
 mod settings;
+mod stats;
 mod tray;
 mod window;
 

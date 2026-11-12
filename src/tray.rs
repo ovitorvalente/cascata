@@ -10,7 +10,9 @@ use gtk::prelude::*;
 use gtk::{gio, glib};
 use ksni::blocking::TrayMethods;
 
+use crate::charts::Pixmap;
 use crate::config;
+use crate::i18n::fill;
 
 const WATCHER_NAME: &str = "org.kde.StatusNotifierWatcher";
 
@@ -30,20 +32,54 @@ const CALL_TIMEOUT_MS: i32 = 10 * 1000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     Show,
+    ShowDetails,
     CancelDownload,
+    /// Mostra o último arquivo concluído no gerenciador de arquivos.
+    ShowLastFile,
     Quit,
+}
+
+/// O que a bandeja mostra em um dado momento. É montado na thread
+/// principal, já com os textos traduzidos e os desenhos prontos.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct View {
+    /// Ícone desenhado na hora; vazio = o ícone normal do aplicativo.
+    pub icon: Vec<Pixmap>,
+    /// Resumo de uma linha, usado na dica do ícone.
+    pub summary: String,
+    /// Linhas informativas do menu (título, progresso, velocidade…).
+    pub lines: Vec<String>,
+    /// Miniatura do gráfico de velocidade (PNG), ao lado da primeira linha.
+    pub sparkline: Vec<u8>,
+    pub can_cancel: bool,
+    /// Nome do último arquivo concluído.
+    pub last_file: Option<String>,
 }
 
 struct CascataTray {
     commands: async_channel::Sender<Command>,
-    downloading: bool,
-    status: String,
+    view: View,
 }
 
 impl CascataTray {
     fn send(&self, command: Command) {
         let _ = self.commands.send_blocking(command);
     }
+}
+
+fn action(label: String, command: Command) -> ksni::MenuItem<CascataTray> {
+    ksni::menu::StandardItem {
+        label,
+        activate: Box::new(move |tray: &mut CascataTray| tray.send(command)),
+        ..Default::default()
+    }
+    .into()
+}
+
+/// No protocolo do menu, "_" marca tecla de atalho; textos livres, como o
+/// título do vídeo, precisam ter o caractere duplicado.
+fn literal(label: &str) -> String {
+    label.replace('_', "__")
 }
 
 impl ksni::Tray for CascataTray {
@@ -56,13 +92,30 @@ impl ksni::Tray for CascataTray {
     }
 
     fn icon_name(&self) -> String {
-        config::APP_ID.into()
+        // Com um ícone desenhado, o nome fica vazio para ele ter prioridade.
+        if self.view.icon.is_empty() {
+            config::APP_ID.into()
+        } else {
+            String::new()
+        }
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        self.view
+            .icon
+            .iter()
+            .map(|pixmap| ksni::Icon {
+                width: pixmap.size,
+                height: pixmap.size,
+                data: pixmap.argb.clone(),
+            })
+            .collect()
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
         ksni::ToolTip {
             title: config::APP_NAME.into(),
-            description: self.status.clone(),
+            description: self.view.summary.clone(),
             ..Default::default()
         }
     }
@@ -73,43 +126,46 @@ impl ksni::Tray for CascataTray {
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::StandardItem;
+        use ksni::MenuItem::Separator;
 
-        let mut items: Vec<ksni::MenuItem<Self>> = vec![StandardItem {
-            label: gettext("Open Cascata"),
-            activate: Box::new(|tray: &mut Self| tray.send(Command::Show)),
-            ..Default::default()
-        }
-        .into()];
+        let mut items = vec![
+            action(gettext("Open Cascata"), Command::Show),
+            action(gettext("Download details"), Command::ShowDetails),
+        ];
 
-        if self.downloading {
-            items.push(ksni::MenuItem::Separator);
-            items.push(
-                StandardItem {
-                    label: self.status.clone(),
-                    enabled: false,
-                    ..Default::default()
-                }
-                .into(),
-            );
-            items.push(
-                StandardItem {
-                    label: gettext("Cancel download"),
-                    activate: Box::new(|tray: &mut Self| tray.send(Command::CancelDownload)),
-                    ..Default::default()
-                }
-                .into(),
-            );
-        }
-
-        items.push(ksni::MenuItem::Separator);
-        items.push(
-            StandardItem {
-                label: gettext("Quit"),
-                activate: Box::new(|tray: &mut Self| tray.send(Command::Quit)),
-                ..Default::default()
+        if !self.view.lines.is_empty() {
+            items.push(Separator);
+            for (index, line) in self.view.lines.iter().enumerate() {
+                items.push(
+                    StandardItem {
+                        label: literal(line),
+                        enabled: false,
+                        icon_data: if index == 0 {
+                            self.view.sparkline.clone()
+                        } else {
+                            Vec::new()
+                        },
+                        ..Default::default()
+                    }
+                    .into(),
+                );
             }
-            .into(),
-        );
+        }
+        if self.view.can_cancel {
+            items.push(action(gettext("Cancel download"), Command::CancelDownload));
+        }
+
+        if let Some(name) = &self.view.last_file {
+            items.push(Separator);
+            let label = fill(
+                &gettext("Show “{name}” in folder"),
+                &[("name", &literal(name))],
+            );
+            items.push(action(label, Command::ShowLastFile));
+        }
+
+        items.push(Separator);
+        items.push(action(gettext("Quit"), Command::Quit));
         items
     }
 }
@@ -127,8 +183,7 @@ impl Tray {
         let task = gio::spawn_blocking(move || {
             CascataTray {
                 commands,
-                downloading: false,
-                status: String::new(),
+                view: View::default(),
             }
             .spawn()
             .map(|handle| Tray { handle })
@@ -138,13 +193,9 @@ impl Tray {
             .unwrap_or_else(|_| Err(gettext("The tray icon could not be created.")))
     }
 
-    /// Atualiza o texto de estado mostrado no menu e na dica do ícone.
-    pub fn set_status(&self, downloading: bool, status: &str) {
-        let status = status.to_string();
-        self.handle.update(move |tray| {
-            tray.downloading = downloading;
-            tray.status = status;
-        });
+    /// Troca o ícone, a dica e o conteúdo do menu.
+    pub fn set_view(&self, view: View) {
+        self.handle.update(move |tray| tray.view = view);
     }
 }
 
