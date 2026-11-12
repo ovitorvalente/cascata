@@ -18,7 +18,7 @@ const SHELL_NAME: &str = "org.gnome.Shell.Extensions";
 const SHELL_PATH: &str = "/org/gnome/Shell/Extensions";
 
 /// Extensão publicada em extensions.gnome.org.
-const EXTENSION_UUID: &str = "appindicatorsupport@rgjds.com";
+const EXTENSION_UUID: &str = "appindicatorsupport@rgcjonas.gmail.com";
 /// Variante que acompanha o Ubuntu.
 const UBUNTU_EXTENSION_UUID: &str = "ubuntu-appindicators@ubuntu.com";
 
