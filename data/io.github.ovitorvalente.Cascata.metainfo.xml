@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.cascata.Cascata</id>
+  <id>io.github.ovitorvalente.Cascata</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
 
@@ -31,12 +31,14 @@
     </ul>
   </description>
 
-  <developer id="io.github.cascata">
-    <name>Cascata contributors</name>
+  <developer id="io.github.ovitorvalente">
+    <name>Vitor Valente</name>
   </developer>
 
-  <launchable type="desktop-id">io.github.cascata.Cascata.desktop</launchable>
-  <url type="homepage">https://github.com/cascata/cascata</url>
+  <launchable type="desktop-id">io.github.ovitorvalente.Cascata.desktop</launchable>
+  <url type="homepage">https://github.com/ovitorvalente/cascata</url>
+  <url type="bugtracker">https://github.com/ovitorvalente/cascata/issues</url>
+  <url type="vcs-browser">https://github.com/ovitorvalente/cascata</url>
 
   <provides>
     <binary>cascata</binary>

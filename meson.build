@@ -8,7 +8,7 @@ project(
 
 gnome = import('gnome')
 
-app_id = 'io.github.cascata.Cascata'
+app_id = 'io.github.ovitorvalente.Cascata'
 
 # Bibliotecas de sistema exigidas pelas crates gtk4 e libadwaita.
 dependency('gtk4', version: '>= 4.12')

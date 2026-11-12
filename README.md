@@ -97,10 +97,7 @@ src/config.rs      ID e nome do aplicativo
 data/              .desktop, metainfo (AppStream) e ícone
 ```
 
-O ID do aplicativo é `io.github.cascata.Cascata`. Antes de publicar, troque-o
-por um baseado em um domínio ou conta sua (por exemplo
-`io.github.<usuario>.Cascata`) em `src/config.rs`, `meson.build` e nos nomes
-dos arquivos em `data/`.
+O ID do aplicativo é `io.github.ovitorvalente.Cascata`.
 
 ## Aviso
 
