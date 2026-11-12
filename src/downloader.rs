@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+use gettextrs::gettext;
+
 const TAG_PROGRESS: &str = "CASCATA_DL|";
 const TAG_TITLE: &str = "CASCATA_TITLE|";
 const TAG_POST: &str = "CASCATA_PP|";
@@ -182,7 +184,7 @@ fn error_message(stderr: &str) -> String {
     let start = lines.len().saturating_sub(5);
     let tail = lines[start..].join("\n");
     if tail.is_empty() {
-        "O yt-dlp terminou com erro.".to_string()
+        gettext("yt-dlp exited with an error.")
     } else {
         tail
     }
@@ -381,6 +383,6 @@ mod tests {
     fn picks_last_error_line() {
         let stderr = "WARNING: algo\nERROR: primeiro\nERROR: [youtube] abc: Video unavailable\n";
         assert_eq!(error_message(stderr), "[youtube] abc: Video unavailable");
-        assert_eq!(error_message(""), "O yt-dlp terminou com erro.");
+        assert_eq!(error_message(""), "yt-dlp exited with an error.");
     }
 }

@@ -1,0 +1,328 @@
+# Brazilian Portuguese translation for Cascata.
+# Copyright (C) 2026 Vitor Valente
+# This file is distributed under the same license as the cascata package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cascata 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-12 17:02+0000\n"
+"PO-Revision-Date: 2026-11-12 17:00+0000\n"
+"Last-Translator: Vitor Valente\n"
+"Language-Team: Brazilian Portuguese\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: src/about.rs:14
+msgid "Video in MP4 with a maximum resolution of your choice, from 360p to 4K"
+msgstr "Vídeo em MP4 com resolução máxima à escolha, de 360p a 4K"
+
+#: src/about.rs:15
+msgid "Audio only, converted to MP3"
+msgstr "Somente áudio, convertido para MP3"
+
+#: src/about.rs:16
+msgid "Whole playlist downloads"
+msgstr "Download de playlists inteiras"
+
+#: src/about.rs:17
+msgid "Installs yt-dlp and FFmpeg on Fedora and Ubuntu"
+msgstr "Instalação do yt-dlp e do FFmpeg no Fedora e no Ubuntu"
+
+#: src/about.rs:19
+msgid "First release of Cascata."
+msgstr "Primeira versão do Cascata."
+
+#: src/about.rs:34
+msgid ""
+"Download videos and audio from the internet. A front end for yt-dlp and "
+"FFmpeg made with GTK 4 and libadwaita."
+msgstr ""
+"Baixe vídeos e áudios da internet. Interface para o yt-dlp e o FFmpeg feita "
+"com GTK 4 e libadwaita."
+
+#: src/about.rs:53
+msgid "yt-dlp documentation"
+msgstr "Documentação do yt-dlp"
+
+#: src/about.rs:57
+msgid "FFmpeg documentation"
+msgstr "Documentação do FFmpeg"
+
+#: src/about.rs:62
+msgid "Tools used"
+msgstr "Ferramentas utilizadas"
+
+#: src/about.rs:73
+msgid "© yt-dlp contributors"
+msgstr "© colaboradores do yt-dlp"
+
+#: src/about.rs:76
+msgid ""
+"Released under the <a href=\"https://unlicense.org\">Unlicense</a> (public "
+"domain)."
+msgstr ""
+"Distribuído sob a <a href=\"https://unlicense.org\">Unlicense</a> (domínio "
+"público)."
+
+#: src/about.rs:82
+msgid "© FFmpeg developers"
+msgstr "© desenvolvedores do FFmpeg"
+
+#: src/about.rs:85
+msgid ""
+"Released under the LGPL 2.1 or later; some builds include components under "
+"the GPL. See <a href=\"https://ffmpeg.org/legal.html\">ffmpeg.org/"
+"legal.html</a>."
+msgstr ""
+"Distribuído sob a LGPL 2.1 ou posterior; algumas compilações incluem "
+"componentes sob a GPL. Veja <a href=\"https://ffmpeg.org/"
+"legal.html\">ffmpeg.org/legal.html</a>."
+
+#: src/about.rs:131
+msgid "unknown"
+msgstr "desconhecido"
+
+#: src/about.rs:144
+msgid "checking…"
+msgstr "verificando…"
+
+#: src/about.rs:145
+msgid "not installed"
+msgstr "não instalado"
+
+#: src/deps.rs:175
+#, rust-format
+msgid "Could not run pkexec: {error}"
+msgstr "Não foi possível executar o pkexec: {error}"
+
+#: src/deps.rs:186
+msgid "Authentication was cancelled."
+msgstr "A autenticação foi cancelada."
+
+#: src/deps.rs:187
+msgid "Not authorized to install packages."
+msgstr "Autorização negada para instalar pacotes."
+
+#: src/deps.rs:202
+msgid "The installation stopped unexpectedly."
+msgstr "A instalação foi interrompida inesperadamente."
+
+#: src/deps.rs:210
+msgid "The package manager exited with an error."
+msgstr "O gerenciador de pacotes terminou com erro."
+
+#: src/downloader.rs:187
+msgid "yt-dlp exited with an error."
+msgstr "O yt-dlp terminou com erro."
+
+#: src/window.rs:33
+msgid "Best available"
+msgstr "Melhor disponível"
+
+#: src/window.rs:43
+#, rust-format
+msgid "{first} and {second}"
+msgstr "{first} e {second}"
+
+#: src/window.rs:78
+msgid "Check dependencies"
+msgstr "Verificar dependências"
+
+#: src/window.rs:81
+msgid "About Cascata"
+msgstr "Sobre o Cascata"
+
+#: src/window.rs:85
+msgid "Main menu"
+msgstr "Menu principal"
+
+#: src/window.rs:98
+msgid "Video address"
+msgstr "Endereço do vídeo"
+
+#: src/window.rs:103
+msgid "Paste"
+msgstr "Colar"
+
+#: src/window.rs:113
+msgid "Format"
+msgstr "Formato"
+
+#: src/window.rs:115
+msgid "Video (MP4)"
+msgstr "Vídeo (MP4)"
+
+#: src/window.rs:116
+msgid "Audio only (MP3)"
+msgstr "Somente áudio (MP3)"
+
+#: src/window.rs:123
+msgid "Quality"
+msgstr "Qualidade"
+
+#: src/window.rs:128
+msgid "Download the whole playlist"
+msgstr "Baixar a playlist inteira"
+
+#: src/window.rs:129
+msgid "When the address is part of a playlist"
+msgstr "Quando o endereço fizer parte de uma playlist"
+
+#: src/window.rs:134
+msgid "Choose folder"
+msgstr "Escolher pasta"
+
+#: src/window.rs:139 src/window.rs:470
+msgid "Destination folder"
+msgstr "Pasta de destino"
+
+#: src/window.rs:146
+msgid "Options"
+msgstr "Opções"
+
+#: src/window.rs:177
+msgid "Download"
+msgstr "Baixar"
+
+#: src/window.rs:182 src/window.rs:432
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/window.rs:309
+msgid "Cancelling…"
+msgstr "Cancelando…"
+
+#: src/window.rs:350
+msgid "yt-dlp and FFmpeg are installed"
+msgstr "yt-dlp e FFmpeg estão instalados"
+
+#: src/window.rs:392
+#, rust-format
+msgid "{tools} is not installed"
+msgid_plural "{tools} are not installed"
+msgstr[0] "{tools} não está instalado"
+msgstr[1] "{tools} não estão instalados"
+
+#: src/window.rs:397 src/window.rs:432
+msgid "Install"
+msgstr "Instalar"
+
+#: src/window.rs:400
+#, rust-format
+msgid ""
+"{tools} is not installed. Install it with your system's package manager."
+msgid_plural ""
+"{tools} are not installed. Install them with your system's package manager."
+msgstr[0] ""
+"{tools} não está instalado. Instale pelo gerenciador de pacotes do seu "
+"sistema."
+msgstr[1] ""
+"{tools} não estão instalados. Instale pelo gerenciador de pacotes do seu "
+"sistema."
+
+#: src/window.rs:424
+#, rust-format
+msgid ""
+"Cascata needs {tools} to work. The command below will run as administrator "
+"and you will be asked for your password:\n"
+"\n"
+"{command}"
+msgstr ""
+"O Cascata precisa de {tools} para funcionar. O comando abaixo será executado "
+"como administrador e a sua senha será solicitada:\n"
+"\n"
+"{command}"
+
+#: src/window.rs:431
+msgid "Install dependencies?"
+msgstr "Instalar dependências?"
+
+#: src/window.rs:443
+msgid "Installing dependencies…"
+msgstr "Instalando dependências…"
+
+#: src/window.rs:452
+msgid "Dependencies installed"
+msgstr "Dependências instaladas"
+
+#: src/window.rs:455
+msgid "Installation incomplete"
+msgstr "Instalação incompleta"
+
+#: src/window.rs:457
+msgid ""
+"The package manager finished, but the tools still could not be found in the "
+"PATH."
+msgstr ""
+"O gerenciador de pacotes terminou, mas as ferramentas ainda não foram "
+"encontradas no PATH."
+
+#: src/window.rs:461
+msgid "Could not install"
+msgstr "Não foi possível instalar"
+
+#: src/window.rs:498
+msgid "Enter the video address"
+msgstr "Informe o endereço do vídeo"
+
+#: src/window.rs:505
+msgid "The address must start with http:// or https://"
+msgstr "O endereço precisa começar com http:// ou https://"
+
+#: src/window.rs:534
+msgid "Could not start yt-dlp"
+msgstr "Não foi possível iniciar o yt-dlp"
+
+#: src/window.rs:542
+msgid "Fetching information…"
+msgstr "Obtendo informações…"
+
+#: src/window.rs:543
+msgid "Connecting…"
+msgstr "Conectando…"
+
+#: src/window.rs:569
+#, rust-format
+msgid "Downloading — {percent}%"
+msgstr "Baixando — {percent}%"
+
+#: src/window.rs:577
+#, rust-format
+msgid "{time} left"
+msgstr "restam {time}"
+
+#: src/window.rs:583
+msgid "Processing with FFmpeg…"
+msgstr "Processando com o FFmpeg…"
+
+#: src/window.rs:602
+msgid "Done"
+msgstr "Concluído"
+
+#: src/window.rs:605
+msgid "Download finished"
+msgstr "Download concluído"
+
+#: src/window.rs:607
+msgid "Show in folder"
+msgstr "Mostrar na pasta"
+
+#: src/window.rs:625
+msgid "Cancelled"
+msgstr "Cancelado"
+
+#: src/window.rs:629
+msgid "Failed"
+msgstr "Falhou"
+
+#: src/window.rs:630
+msgid "The download failed"
+msgstr "O download falhou"
+
+#: src/window.rs:660
+msgid "Close"
+msgstr "Fechar"

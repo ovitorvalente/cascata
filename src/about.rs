@@ -1,6 +1,7 @@
 //! Diálogo "Sobre o Cascata".
 
 use adw::prelude::*;
+use gettextrs::gettext;
 use gtk::{gio, glib};
 
 use crate::config;
@@ -8,14 +9,20 @@ use crate::deps;
 
 /// Novidades da versão atual, no subconjunto de marcação aceito pelo
 /// `AdwAboutDialog`. Mantenha em sincronia com o `<release>` do metainfo.
-const RELEASE_NOTES: &str = "\
-<p>Primeira versão do Cascata.</p>\
-<ul>\
-<li>Vídeo em MP4 com resolução máxima à escolha, de 360p a 4K</li>\
-<li>Somente áudio, convertido para MP3</li>\
-<li>Download de playlists inteiras</li>\
-<li>Instalação do yt-dlp e do FFmpeg no Fedora e no Ubuntu</li>\
-</ul>";
+fn release_notes() -> String {
+    let items = [
+        gettext("Video in MP4 with a maximum resolution of your choice, from 360p to 4K"),
+        gettext("Audio only, converted to MP3"),
+        gettext("Whole playlist downloads"),
+        gettext("Installs yt-dlp and FFmpeg on Fedora and Ubuntu"),
+    ];
+    let mut notes = format!("<p>{}</p><ul>", gettext("First release of Cascata."));
+    for item in items {
+        notes.push_str(&format!("<li>{item}</li>"));
+    }
+    notes.push_str("</ul>");
+    notes
+}
 
 pub fn show(parent: &impl IsA<gtk::Widget>) {
     let about = adw::AboutDialog::builder()
@@ -23,10 +30,10 @@ pub fn show(parent: &impl IsA<gtk::Widget>) {
         .application_icon(config::APP_ID)
         .version(config::VERSION)
         .developer_name(config::DEVELOPER)
-        .comments(
-            "Baixe vídeos e áudios da internet. Interface para o yt-dlp e o \
-             FFmpeg feita com GTK 4 e libadwaita.",
-        )
+        .comments(gettext(
+            "Download videos and audio from the internet. A front end for \
+             yt-dlp and FFmpeg made with GTK 4 and libadwaita.",
+        ))
         .website(config::WEBSITE)
         .issue_url(config::ISSUE_URL)
         .developers([format!(
@@ -37,22 +44,22 @@ pub fn show(parent: &impl IsA<gtk::Widget>) {
         .copyright(format!("© 2026 {}", config::DEVELOPER))
         .license_type(gtk::License::MitX11)
         .release_notes_version(config::VERSION)
-        .release_notes(RELEASE_NOTES)
+        .release_notes(release_notes())
         .debug_info(debug_info(None))
-        .debug_info_filename("cascata-depuracao.txt")
+        .debug_info_filename("cascata-debug.txt")
         .build();
 
     about.add_link(
-        "Documentação do yt-dlp",
+        &gettext("yt-dlp documentation"),
         "https://github.com/yt-dlp/yt-dlp#readme",
     );
     about.add_link(
-        "Documentação do FFmpeg",
+        &gettext("FFmpeg documentation"),
         "https://ffmpeg.org/documentation.html",
     );
 
     about.add_acknowledgement_section(
-        Some("Ferramentas utilizadas"),
+        Some(&gettext("Tools used")),
         &[
             "yt-dlp https://github.com/yt-dlp/yt-dlp",
             "FFmpeg https://ffmpeg.org",
@@ -63,22 +70,22 @@ pub fn show(parent: &impl IsA<gtk::Widget>) {
     // instaladas no sistema.
     about.add_legal_section(
         "yt-dlp",
-        Some("© colaboradores do yt-dlp"),
+        Some(&gettext("© yt-dlp contributors")),
         gtk::License::Custom,
-        Some(
-            "Distribuído sob a <a href=\"https://unlicense.org\">Unlicense</a> \
-             (domínio público).",
-        ),
+        Some(&gettext(
+            "Released under the <a href=\"https://unlicense.org\">Unlicense</a> \
+             (public domain).",
+        )),
     );
     about.add_legal_section(
         "FFmpeg",
-        Some("© desenvolvedores do FFmpeg"),
+        Some(&gettext("© FFmpeg developers")),
         gtk::License::Custom,
-        Some(
-            "Distribuído sob a LGPL 2.1 ou posterior; algumas compilações \
-             incluem componentes sob a GPL. Veja \
+        Some(&gettext(
+            "Released under the LGPL 2.1 or later; some builds include \
+             components under the GPL. See \
              <a href=\"https://ffmpeg.org/legal.html\">ffmpeg.org/legal.html</a>.",
-        ),
+        )),
     );
 
     about.present(Some(parent));
@@ -121,7 +128,7 @@ fn debug_info(tools: Option<&ToolVersions>) -> String {
         adw::minor_version(),
         adw::micro_version()
     );
-    let system = deps::os_pretty_name().unwrap_or_else(|| "desconhecido".to_string());
+    let system = deps::os_pretty_name().unwrap_or_else(|| gettext("unknown"));
     format_debug_info(tools, &gtk_version, &adw_version, &system)
 }
 
@@ -134,8 +141,8 @@ fn format_debug_info(
     system: &str,
 ) -> String {
     let tool = |version: Option<&Option<String>>| match version {
-        None => "verificando…".to_string(),
-        Some(None) => "não instalado".to_string(),
+        None => gettext("checking…"),
+        Some(None) => gettext("not installed"),
         Some(Some(version)) => version.clone(),
     };
 
@@ -145,7 +152,7 @@ fn format_debug_info(
          FFmpeg: {}\n\
          GTK: {gtk_version}\n\
          libadwaita: {adw_version}\n\
-         Sistema: {system}\n",
+         System: {system}\n",
         config::APP_NAME,
         config::VERSION,
         tool(tools.map(|t| &t.ytdlp)),
@@ -180,16 +187,16 @@ mod tests {
     #[test]
     fn debug_info_reports_tool_state() {
         let pending = format_debug_info(None, "4.22.5", "1.9.4", "Fedora Linux 44");
-        assert!(pending.contains("yt-dlp: verificando…"));
+        assert!(pending.contains("yt-dlp: checking…"));
 
         let tools = ToolVersions {
             ytdlp: Some("2026.10.21".into()),
             ffmpeg: None,
         };
         let text = format_debug_info(Some(&tools), "4.22.5", "1.9.4", "Fedora Linux 44");
-        assert!(text.contains("GTK: 4.22.5\nlibadwaita: 1.9.4\nSistema: Fedora Linux 44\n"));
+        assert!(text.contains("GTK: 4.22.5\nlibadwaita: 1.9.4\nSystem: Fedora Linux 44\n"));
         assert!(text.contains("yt-dlp: 2026.10.21"));
-        assert!(text.contains("FFmpeg: não instalado"));
+        assert!(text.contains("FFmpeg: not installed"));
         assert!(text.starts_with(&format!("{} {}", config::APP_NAME, config::VERSION)));
     }
 }

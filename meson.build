@@ -7,6 +7,7 @@ project(
 )
 
 gnome = import('gnome')
+i18n = import('i18n')
 
 app_id = 'io.github.ovitorvalente.Cascata'
 
@@ -15,6 +16,7 @@ dependency('gtk4', version: '>= 4.12')
 dependency('libadwaita-1', version: '>= 1.5')
 
 subdir('data')
+subdir('po')
 subdir('src')
 
 gnome.post_install(

@@ -13,6 +13,7 @@ qualidade, e o arquivo é salvo na pasta escolhida.
 - Progresso, velocidade e tempo restante; cancelamento a qualquer momento
 - Se o yt-dlp ou o FFmpeg não estiverem instalados, o app oferece instalar
   (Fedora e Ubuntu)
+- Interface em português (Brasil) e inglês, conforme o idioma do sistema
 
 ## Como a instalação das dependências funciona
 
@@ -41,14 +42,14 @@ Requer Rust 1.92 ou mais novo, GTK ≥ 4.12 e libadwaita ≥ 1.5.
 
 ```bash
 sudo dnf install rust cargo meson ninja-build gcc gtk4-devel libadwaita-devel \
-                 desktop-file-utils appstream
+                 desktop-file-utils appstream gettext
 ```
 
 ### Ubuntu (24.04 ou mais novo)
 
 ```bash
 sudo apt install build-essential meson ninja-build libgtk-4-dev libadwaita-1-dev \
-                 desktop-file-utils appstream curl
+                 desktop-file-utils appstream gettext curl
 # O Rust do repositório do Ubuntu 24.04 é antigo demais; use o rustup:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -75,6 +76,35 @@ detectado automaticamente; escolha o runtime **Host** (ou um toolbox com os
 pacotes acima) e use **Executar**. O app precisa rodar fora do sandbox do
 Flatpak para enxergar o `yt-dlp`/`ffmpeg` do sistema e para instalar pacotes.
 
+## Idiomas
+
+A interface usa o gettext. As mensagens no código estão em inglês, que é o
+idioma padrão; a tradução para o português do Brasil fica em `po/pt_BR.po`.
+O idioma segue o do sistema. Para testar outro:
+
+```bash
+LANGUAGE=pt_BR cascata
+LANGUAGE=en_US cascata
+```
+
+As traduções são instaladas pelo `meson install`. Com `cargo run` o app
+aparece em inglês, a menos que você compile o catálogo e aponte para ele:
+
+```bash
+mkdir -p target/locale/pt_BR/LC_MESSAGES
+msgfmt -o target/locale/pt_BR/LC_MESSAGES/cascata.mo po/pt_BR.po
+CASCATA_LOCALEDIR=target/locale LANGUAGE=pt_BR cargo run
+```
+
+Depois de alterar textos no código, atualize os catálogos:
+
+```bash
+meson compile -C builddir cascata-update-po
+```
+
+Para adicionar um idioma, inclua o código dele em `po/LINGUAS` e crie o
+`po/<idioma>.po` a partir do modelo (`meson compile -C builddir cascata-pot`).
+
 ## Testes
 
 ```bash
@@ -92,10 +122,12 @@ CASCATA_TEST_URL="https://…" CASCATA_TEST_KIND=audio \
 src/main.rs        aplicação (adw::Application)
 src/window.rs      janela e interface (libadwaita)
 src/about.rs       diálogo "Sobre" e informações de depuração
+src/i18n.rs        configuração do gettext
 src/downloader.rs  executa o yt-dlp e traduz a saída em eventos
 src/deps.rs        detecção e instalação do yt-dlp e do FFmpeg
 src/config.rs      ID, nome e endereços do projeto
 data/              .desktop, metainfo (AppStream) e ícone
+po/                traduções (gettext)
 ```
 
 O ID do aplicativo é `io.github.ovitorvalente.Cascata`.

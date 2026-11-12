@@ -10,6 +10,8 @@ license = "MIT"
 gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
 adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
 async-channel = "2"
+# Usa o gettext da glibc, sem compilar uma cópia própria.
+gettext-rs = { version = "0.8", features = ["gettext-system"] }
 
 [profile.release]
 lto = true

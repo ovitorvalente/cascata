@@ -9,21 +9,43 @@ use adw::prelude::*;
 use gtk::glib::clone;
 use gtk::{gio, glib};
 
+use gettextrs::{gettext, ngettext};
+
 use crate::about;
 use crate::config;
 use crate::deps;
 use crate::downloader::{self, Event, Kind, Outcome, Request};
+use crate::i18n::fill;
 
-/// Opções do seletor de qualidade: (rótulo, altura máxima).
-const QUALITIES: [(&str, Option<u32>); 7] = [
-    ("Melhor disponível", None),
-    ("2160p (4K)", Some(2160)),
-    ("1440p", Some(1440)),
-    ("1080p", Some(1080)),
-    ("720p", Some(720)),
-    ("480p", Some(480)),
-    ("360p", Some(360)),
+/// Alturas máximas do seletor de qualidade; `None` = melhor disponível.
+const QUALITIES: [Option<u32>; 7] = [
+    None,
+    Some(2160),
+    Some(1440),
+    Some(1080),
+    Some(720),
+    Some(480),
+    Some(360),
 ];
+
+fn quality_label(height: Option<u32>) -> String {
+    match height {
+        None => gettext("Best available"),
+        Some(2160) => "2160p (4K)".to_string(),
+        Some(height) => format!("{height}p"),
+    }
+}
+
+/// Lista legível do que falta, como "yt-dlp and FFmpeg".
+fn missing_list(status: deps::Status) -> String {
+    match status.missing_names().as_slice() {
+        [first, second] => fill(
+            &gettext("{first} and {second}"),
+            &[("first", first), ("second", second)],
+        ),
+        names => names.join(", "),
+    }
+}
 
 struct Ui {
     window: adw::ApplicationWindow,
@@ -52,12 +74,15 @@ struct Ui {
 pub fn build(app: &adw::Application) {
     // --- Cabeçalho -------------------------------------------------------
     let menu = gio::Menu::new();
-    menu.append(Some("Verificar dependências"), Some("win.check-deps"));
-    menu.append(Some("Sobre o Cascata"), Some("win.about"));
+    menu.append(
+        Some(gettext("Check dependencies").as_str()),
+        Some("win.check-deps"),
+    );
+    menu.append(Some(gettext("About Cascata").as_str()), Some("win.about"));
 
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
-        .tooltip_text("Menu principal")
+        .tooltip_text(gettext("Main menu"))
         .menu_model(&menu)
         .primary(true)
         .build();
@@ -70,12 +95,12 @@ pub fn build(app: &adw::Application) {
 
     // --- Formulário ------------------------------------------------------
     let url_row = adw::EntryRow::builder()
-        .title("Endereço do vídeo")
+        .title(gettext("Video address"))
         .input_purpose(gtk::InputPurpose::Url)
         .build();
     let paste_button = gtk::Button::builder()
         .icon_name("edit-paste-symbolic")
-        .tooltip_text("Colar")
+        .tooltip_text(gettext("Paste"))
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();
@@ -85,38 +110,41 @@ pub fn build(app: &adw::Application) {
     source.add(&url_row);
 
     let kind_row = adw::ComboRow::builder()
-        .title("Formato")
+        .title(gettext("Format"))
         .model(&gtk::StringList::new(&[
-            "Vídeo (MP4)",
-            "Somente áudio (MP3)",
+            gettext("Video (MP4)").as_str(),
+            gettext("Audio only (MP3)").as_str(),
         ]))
         .build();
 
-    let quality_labels: Vec<&str> = QUALITIES.iter().map(|(label, _)| *label).collect();
+    let quality_labels: Vec<String> = QUALITIES.iter().map(|h| quality_label(*h)).collect();
+    let quality_labels: Vec<&str> = quality_labels.iter().map(String::as_str).collect();
     let quality_row = adw::ComboRow::builder()
-        .title("Qualidade")
+        .title(gettext("Quality"))
         .model(&gtk::StringList::new(&quality_labels))
         .build();
 
     let playlist_row = adw::SwitchRow::builder()
-        .title("Baixar a playlist inteira")
-        .subtitle("Quando o endereço fizer parte de uma playlist")
+        .title(gettext("Download the whole playlist"))
+        .subtitle(gettext("When the address is part of a playlist"))
         .build();
 
     let folder_button = gtk::Button::builder()
         .icon_name("folder-open-symbolic")
-        .tooltip_text("Escolher pasta")
+        .tooltip_text(gettext("Choose folder"))
         .valign(gtk::Align::Center)
         .css_classes(["flat"])
         .build();
     let folder_row = adw::ActionRow::builder()
-        .title("Pasta de destino")
+        .title(gettext("Destination folder"))
         .subtitle_lines(1)
         .activatable_widget(&folder_button)
         .build();
     folder_row.add_suffix(&folder_button);
 
-    let options = adw::PreferencesGroup::builder().title("Opções").build();
+    let options = adw::PreferencesGroup::builder()
+        .title(gettext("Options"))
+        .build();
     options.add(&kind_row);
     options.add(&quality_row);
     options.add(&playlist_row);
@@ -146,12 +174,12 @@ pub fn build(app: &adw::Application) {
 
     // --- Botões ----------------------------------------------------------
     let download_button = gtk::Button::builder()
-        .label("Baixar")
+        .label(gettext("Download"))
         .halign(gtk::Align::Center)
         .css_classes(["pill", "suggested-action"])
         .build();
     let cancel_button = gtk::Button::builder()
-        .label("Cancelar")
+        .label(gettext("Cancel"))
         .halign(gtk::Align::Center)
         .visible(false)
         .css_classes(["pill", "destructive-action"])
@@ -278,7 +306,7 @@ pub fn build(app: &adw::Application) {
         move |button| {
             if let Some(job) = ui.job.borrow().as_ref() {
                 button.set_sensitive(false);
-                ui.status_label.set_text("Cancelando…");
+                ui.status_label.set_text(&gettext("Cancelling…"));
                 job.cancel();
             }
         }
@@ -319,7 +347,7 @@ pub fn build(app: &adw::Application) {
         ui,
         move |_, _| {
             if refresh_deps(&ui).all_present() {
-                toast(&ui, "yt-dlp e FFmpeg estão instalados");
+                toast(&ui, &gettext("yt-dlp and FFmpeg are installed"));
             }
         }
     ));
@@ -356,20 +384,24 @@ fn refresh_deps(ui: &Ui) -> deps::Status {
         return status;
     }
 
-    let missing = status.missing_names().join(" e ");
-    let verb = if status.missing_names().len() > 1 {
-        "não estão instalados"
-    } else {
-        "não está instalado"
-    };
+    let tools = missing_list(status);
+    let count = status.missing_names().len() as u32;
 
     if deps::install_plan(status, deps::detect_distro()).is_some() {
-        ui.banner.set_title(&format!("{missing} {verb}"));
-        ui.banner.set_button_label(Some("Instalar"));
+        let title = ngettext(
+            "{tools} is not installed",
+            "{tools} are not installed",
+            count,
+        );
+        ui.banner.set_title(&fill(&title, &[("tools", &tools)]));
+        ui.banner.set_button_label(Some(&gettext("Install")));
     } else {
-        ui.banner.set_title(&format!(
-            "{missing} {verb}. Instale pelo gerenciador de pacotes do seu sistema."
-        ));
+        let title = ngettext(
+            "{tools} is not installed. Install it with your system's package manager.",
+            "{tools} are not installed. Install them with your system's package manager.",
+            count,
+        );
+        ui.banner.set_title(&fill(&title, &[("tools", &tools)]));
         ui.banner.set_button_label(None);
     }
     ui.banner.set_revealed(true);
@@ -388,16 +420,17 @@ fn install_deps(ui: &Rc<Ui>) {
 
     let ui = ui.clone();
     glib::spawn_future_local(async move {
-        let dialog = adw::AlertDialog::new(
-            Some("Instalar dependências?"),
-            Some(&format!(
-                "O Cascata precisa de {} para funcionar. O comando abaixo será \
-                 executado como administrador e a sua senha será solicitada:\n\n{}",
-                status.missing_names().join(" e "),
-                plan.display
-            )),
+        let body = gettext(
+            "Cascata needs {tools} to work. The command below will run as \
+             administrator and you will be asked for your password:\n\n{command}",
         );
-        dialog.add_responses(&[("cancel", "Cancelar"), ("install", "Instalar")]);
+        let body = fill(
+            &body,
+            &[("tools", &missing_list(status)), ("command", &plan.display)],
+        );
+        let dialog = adw::AlertDialog::new(Some(&gettext("Install dependencies?")), Some(&body));
+        let (cancel, install) = (gettext("Cancel"), gettext("Install"));
+        dialog.add_responses(&[("cancel", cancel.as_str()), ("install", install.as_str())]);
         dialog.set_response_appearance("install", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("install"));
         dialog.set_close_response("cancel");
@@ -407,7 +440,7 @@ fn install_deps(ui: &Rc<Ui>) {
         }
 
         ui.installing.set(true);
-        ui.banner.set_title("Instalando dependências…");
+        ui.banner.set_title(&gettext("Installing dependencies…"));
         ui.banner.set_button_label(None);
 
         let result = deps::install(plan).await;
@@ -416,14 +449,16 @@ fn install_deps(ui: &Rc<Ui>) {
         let now = refresh_deps(&ui);
 
         match result {
-            Ok(()) if now.all_present() => toast(&ui, "Dependências instaladas"),
+            Ok(()) if now.all_present() => toast(&ui, &gettext("Dependencies installed")),
             Ok(()) => show_error(
                 &ui,
-                "Instalação incompleta",
-                "O gerenciador de pacotes terminou, mas as ferramentas ainda não \
-                 foram encontradas no PATH.",
+                &gettext("Installation incomplete"),
+                &gettext(
+                    "The package manager finished, but the tools still could not \
+                     be found in the PATH.",
+                ),
             ),
-            Err(message) => show_error(&ui, "Não foi possível instalar", &message),
+            Err(message) => show_error(&ui, &gettext("Could not install"), &message),
         }
     });
 }
@@ -432,7 +467,7 @@ fn choose_folder(ui: &Rc<Ui>) {
     let ui = ui.clone();
     glib::spawn_future_local(async move {
         let dialog = gtk::FileDialog::builder()
-            .title("Pasta de destino")
+            .title(gettext("Destination folder"))
             .modal(true)
             .initial_folder(&gio::File::for_path(&*ui.folder.borrow()))
             .build();
@@ -460,12 +495,15 @@ fn start_download(ui: &Rc<Ui>) {
 
     let url = ui.url_row.text().trim().to_string();
     if url.is_empty() {
-        toast(ui, "Informe o endereço do vídeo");
+        toast(ui, &gettext("Enter the video address"));
         ui.url_row.grab_focus();
         return;
     }
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        toast(ui, "O endereço precisa começar com http:// ou https://");
+        toast(
+            ui,
+            &gettext("The address must start with http:// or https://"),
+        );
         return;
     }
     if !refresh_deps(ui).all_present() {
@@ -479,7 +517,8 @@ fn start_download(ui: &Rc<Ui>) {
     };
     let max_height = QUALITIES
         .get(ui.quality_row.selected() as usize)
-        .and_then(|(_, height)| *height);
+        .copied()
+        .flatten();
 
     let request = Request {
         url,
@@ -492,7 +531,7 @@ fn start_download(ui: &Rc<Ui>) {
     let (handle, events) = match downloader::start(request) {
         Ok(started) => started,
         Err(err) => {
-            show_error(ui, "Não foi possível iniciar o yt-dlp", &err.to_string());
+            show_error(ui, &gettext("Could not start yt-dlp"), &err.to_string());
             return;
         }
     };
@@ -500,8 +539,8 @@ fn start_download(ui: &Rc<Ui>) {
     ui.job.replace(Some(handle));
     ui.last_file.replace(None);
     ui.pulsing.set(false);
-    ui.title_label.set_text("Obtendo informações…");
-    ui.status_label.set_text("Conectando…");
+    ui.title_label.set_text(&gettext("Fetching information…"));
+    ui.status_label.set_text(&gettext("Connecting…"));
     ui.progress_bar.set_fraction(0.0);
     ui.progress_box.set_visible(true);
     set_busy(ui, true);
@@ -525,17 +564,23 @@ fn handle_event(ui: &Rc<Ui>, event: Event) {
         } => {
             ui.pulsing.set(false);
             ui.progress_bar.set_fraction(fraction);
-            let mut text = format!("Baixando — {:.0}%", fraction * 100.0);
+            let percent = format!("{:.0}", fraction * 100.0);
+            let mut text = fill(
+                &gettext("Downloading — {percent}%"),
+                &[("percent", &percent)],
+            );
             if !speed.is_empty() {
                 text.push_str(&format!(" · {speed}"));
             }
             if !eta.is_empty() {
-                text.push_str(&format!(" · restam {eta}"));
+                text.push_str(" · ");
+                text.push_str(&fill(&gettext("{time} left"), &[("time", &eta)]));
             }
             ui.status_label.set_text(&text);
         }
         Event::PostProcessing => {
-            ui.status_label.set_text("Processando com o FFmpeg…");
+            ui.status_label
+                .set_text(&gettext("Processing with FFmpeg…"));
             start_pulse(ui);
         }
         Event::File(path) => {
@@ -554,12 +599,12 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
     match outcome {
         Outcome::Done => {
             ui.progress_bar.set_fraction(1.0);
-            ui.status_label.set_text("Concluído");
+            ui.status_label.set_text(&gettext("Done"));
             ui.url_row.set_text("");
 
-            let done = adw::Toast::new("Download concluído");
+            let done = adw::Toast::new(&gettext("Download finished"));
             if let Some(path) = ui.last_file.borrow().clone() {
-                done.set_button_label(Some("Mostrar na pasta"));
+                done.set_button_label(Some(&gettext("Show in folder")));
                 done.connect_button_clicked(clone!(
                     #[weak]
                     ui,
@@ -577,12 +622,12 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
         }
         Outcome::Cancelled => {
             ui.progress_bar.set_fraction(0.0);
-            ui.status_label.set_text("Cancelado");
+            ui.status_label.set_text(&gettext("Cancelled"));
         }
         Outcome::Failed(message) => {
             ui.progress_bar.set_fraction(0.0);
-            ui.status_label.set_text("Falhou");
-            show_error(ui, "O download falhou", &message);
+            ui.status_label.set_text(&gettext("Failed"));
+            show_error(ui, &gettext("The download failed"), &message);
         }
     }
 }
@@ -612,6 +657,6 @@ fn start_pulse(ui: &Rc<Ui>) {
 
 fn show_error(ui: &Ui, heading: &str, message: &str) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(message));
-    dialog.add_response("close", "Fechar");
+    dialog.add_response("close", &gettext("Close"));
     dialog.present(Some(&ui.window));
 }

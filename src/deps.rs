@@ -3,7 +3,10 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
+use gettextrs::gettext;
 use gtk::{gio, glib};
+
+use crate::i18n::fill;
 
 /// Quais ferramentas estão disponíveis no PATH.
 #[derive(Debug, Clone, Copy)]
@@ -167,7 +170,12 @@ pub async fn install(plan: InstallPlan) -> Result<(), String> {
             .args(&plan.argv)
             .stdin(Stdio::null())
             .output()
-            .map_err(|err| format!("Não foi possível executar o pkexec: {err}"))?;
+            .map_err(|err| {
+                fill(
+                    &gettext("Could not run pkexec: {error}"),
+                    &[("error", &err.to_string())],
+                )
+            })?;
 
         if output.status.success() {
             return Ok(());
@@ -175,8 +183,8 @@ pub async fn install(plan: InstallPlan) -> Result<(), String> {
 
         match output.status.code() {
             // Códigos documentados em pkexec(1).
-            Some(126) => Err("A autenticação foi cancelada.".to_string()),
-            Some(127) => Err("Autorização negada para instalar pacotes.".to_string()),
+            Some(126) => Err(gettext("Authentication was cancelled.")),
+            Some(127) => Err(gettext("Not authorized to install packages.")),
             _ => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -191,7 +199,7 @@ pub async fn install(plan: InstallPlan) -> Result<(), String> {
     });
 
     task.await
-        .unwrap_or_else(|_| Err("A instalação foi interrompida inesperadamente.".to_string()))
+        .unwrap_or_else(|_| Err(gettext("The installation stopped unexpectedly.")))
 }
 
 fn last_lines(text: &str, count: usize) -> String {
@@ -199,7 +207,7 @@ fn last_lines(text: &str, count: usize) -> String {
     let start = lines.len().saturating_sub(count);
     let tail = lines[start..].join("\n");
     if tail.is_empty() {
-        "O gerenciador de pacotes terminou com erro.".to_string()
+        gettext("The package manager exited with an error.")
     } else {
         tail
     }

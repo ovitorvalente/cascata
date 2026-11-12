@@ -22,6 +22,7 @@ custom_target(
   install: true,
   install_dir: get_option('bindir'),
   command: [
+    'env', 'CASCATA_LOCALEDIR=' + get_option('prefix') / get_option('localedir'),
     cargo, 'build', cargo_options,
     '&&',
     'cp', 'src' / rust_target / meson.project_name(), '@OUTPUT@',
