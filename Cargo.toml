@@ -1,0 +1,16 @@
+[package]
+name = "cascata"
+version = "0.1.0"
+edition = "2021"
+description = "Baixe vídeos e áudios da internet com yt-dlp e FFmpeg"
+license = "MIT"
+
+[dependencies]
+# As versões de gtk4 e libadwaita precisam andar juntas (ver livro do gtk-rs).
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+async-channel = "2"
+
+[profile.release]
+lto = true
+strip = true
