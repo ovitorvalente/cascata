@@ -1,4 +1,6 @@
 src/about.rs
 src/deps.rs
 src/downloader.rs
+src/preferences.rs
+src/tray.rs
 src/window.rs

@@ -16,9 +16,12 @@ use crate::config;
 use crate::deps;
 use crate::downloader::{self, Event, Kind, Outcome, Request};
 use crate::i18n::fill;
+use crate::preferences;
+use crate::settings::Settings;
+use crate::tray;
 
 /// Alturas máximas do seletor de qualidade; `None` = melhor disponível.
-const QUALITIES: [Option<u32>; 7] = [
+pub(crate) const QUALITIES: [Option<u32>; 7] = [
     None,
     Some(2160),
     Some(1440),
@@ -28,12 +31,20 @@ const QUALITIES: [Option<u32>; 7] = [
     Some(360),
 ];
 
-fn quality_label(height: Option<u32>) -> String {
+pub(crate) fn quality_label(height: Option<u32>) -> String {
     match height {
         None => gettext("Best available"),
         Some(2160) => "2160p (4K)".to_string(),
         Some(height) => format!("{height}p"),
     }
+}
+
+/// Posição de uma altura máxima no seletor de qualidade.
+pub(crate) fn quality_index(height: Option<u32>) -> u32 {
+    QUALITIES
+        .iter()
+        .position(|other| *other == height)
+        .unwrap_or(0) as u32
 }
 
 /// Lista legível do que falta, como "yt-dlp and FFmpeg".
@@ -47,8 +58,8 @@ fn missing_list(status: deps::Status) -> String {
     }
 }
 
-struct Ui {
-    window: adw::ApplicationWindow,
+pub(crate) struct Ui {
+    pub(crate) window: adw::ApplicationWindow,
     toasts: adw::ToastOverlay,
     banner: adw::Banner,
     options: adw::PreferencesGroup,
@@ -69,11 +80,23 @@ struct Ui {
     last_file: RefCell<Option<String>>,
     pulsing: Cell<bool>,
     installing: Cell<bool>,
+
+    pub(crate) settings: RefCell<Settings>,
+    tray: RefCell<Option<tray::Tray>>,
+    tray_commands: async_channel::Sender<tray::Command>,
+    /// Último estado enviado à bandeja, para não repetir atualizações.
+    tray_status: RefCell<(bool, String)>,
+    /// Se o aviso de "continua em segundo plano" já foi mostrado.
+    background_notified: Cell<bool>,
 }
 
 pub fn build(app: &adw::Application) {
     // --- Cabeçalho -------------------------------------------------------
     let menu = gio::Menu::new();
+    menu.append(
+        Some(gettext("Preferences").as_str()),
+        Some("win.preferences"),
+    );
     menu.append(
         Some(gettext("Check dependencies").as_str()),
         Some("win.check-deps"),
@@ -230,8 +253,8 @@ pub fn build(app: &adw::Application) {
         .content(&toolbar_view)
         .build();
 
-    let default_folder =
-        glib::user_special_dir(glib::UserDirectory::Downloads).unwrap_or_else(glib::home_dir);
+    let settings = Settings::load();
+    let (tray_commands, tray_requests) = async_channel::unbounded();
 
     let ui = Rc::new(Ui {
         window,
@@ -254,8 +277,13 @@ pub fn build(app: &adw::Application) {
         last_file: RefCell::new(None),
         pulsing: Cell::new(false),
         installing: Cell::new(false),
+        settings: RefCell::new(settings),
+        tray: RefCell::new(None),
+        tray_commands,
+        tray_status: RefCell::new((false, String::new())),
+        background_notified: Cell::new(false),
     });
-    set_folder(&ui, default_folder);
+    apply_download_defaults(&ui);
 
     // --- Sinais ----------------------------------------------------------
     // Os closures guardam referências fracas para não criar ciclos com os
@@ -318,13 +346,29 @@ pub fn build(app: &adw::Application) {
         move |_| install_deps(&ui)
     ));
 
-    // Não deixa um yt-dlp órfão rodando ao fechar a janela.
+    // Ao fechar: com o ícone de bandeja ativo, ou com um download em
+    // andamento e a opção de segundo plano ligada, a janela só é escondida.
     ui.window.connect_close_request(clone!(
         #[weak]
         ui,
         #[upgrade_or]
         glib::Propagation::Proceed,
-        move |_| {
+        move |window| {
+            let busy = ui.job.borrow().is_some();
+            let in_tray = ui.tray.borrow().is_some();
+            if in_tray || (busy && ui.settings.borrow().background) {
+                window.set_visible(false);
+                if busy && !in_tray && !ui.background_notified.replace(true) {
+                    notify(
+                        &ui,
+                        NOTIFICATION_BACKGROUND,
+                        &gettext("The download continues in the background"),
+                        &gettext("Cascata will notify you when it finishes."),
+                    );
+                }
+                return glib::Propagation::Stop;
+            }
+            // Não deixa um yt-dlp órfão rodando.
             if let Some(job) = ui.job.borrow().as_ref() {
                 job.cancel();
             }
@@ -341,6 +385,23 @@ pub fn build(app: &adw::Application) {
     ));
     ui.window.add_action(&about_action);
 
+    let preferences_action = gio::SimpleAction::new("preferences", None);
+    preferences_action.connect_activate(clone!(
+        #[weak]
+        ui,
+        move |_, _| preferences::show(&ui)
+    ));
+    ui.window.add_action(&preferences_action);
+
+    // Fechar pela ação (Ctrl+W) passa pelo mesmo caminho do botão de fechar.
+    let close_action = gio::SimpleAction::new("close", None);
+    close_action.connect_activate(clone!(
+        #[weak]
+        ui,
+        move |_, _| ui.window.close()
+    ));
+    ui.window.add_action(&close_action);
+
     let check_action = gio::SimpleAction::new("check-deps", None);
     check_action.connect_activate(clone!(
         #[weak]
@@ -353,6 +414,61 @@ pub fn build(app: &adw::Application) {
     ));
     ui.window.add_action(&check_action);
 
+    // Ações do aplicativo: usadas pelas notificações e pelos atalhos.
+    let present_action = gio::SimpleAction::new("present", None);
+    present_action.connect_activate(clone!(
+        #[weak]
+        ui,
+        move |_, _| present(&ui)
+    ));
+    app.add_action(&present_action);
+
+    let quit_action = gio::SimpleAction::new("quit", None);
+    quit_action.connect_activate(clone!(
+        #[weak]
+        ui,
+        move |_, _| quit(&ui)
+    ));
+    app.add_action(&quit_action);
+
+    app.set_accels_for_action("win.preferences", &["<Control>comma"]);
+    app.set_accels_for_action("win.close", &["<Control>w"]);
+    app.set_accels_for_action("app.quit", &["<Control>q"]);
+
+    // Pedidos vindos do menu da bandeja. A referência é fraca para que este
+    // laço não mantenha a `Ui` viva depois de a janela ser destruída.
+    let weak_ui = Rc::downgrade(&ui);
+    glib::spawn_future_local(async move {
+        while let Ok(command) = tray_requests.recv().await {
+            let Some(ui) = weak_ui.upgrade() else {
+                break;
+            };
+            match command {
+                tray::Command::Show => present(&ui),
+                tray::Command::CancelDownload => {
+                    if let Some(job) = ui.job.borrow().as_ref() {
+                        job.cancel();
+                    }
+                }
+                tray::Command::Quit => quit(&ui),
+            }
+        }
+    });
+
+    if ui.settings.borrow().tray {
+        glib::spawn_future_local(clone!(
+            #[weak]
+            ui,
+            async move {
+                // Sem bandeja na sessão (extensão desligada, por exemplo), o
+                // app simplesmente funciona sem o ícone.
+                if tray::available().await {
+                    let _ = start_tray(&ui).await;
+                }
+            }
+        ));
+    }
+
     refresh_deps(&ui);
     ui.window.present();
 
@@ -361,6 +477,86 @@ pub fn build(app: &adw::Application) {
     ui.window.connect_destroy(move |_| {
         keep_alive.borrow_mut().take();
     });
+}
+
+const NOTIFICATION_BACKGROUND: &str = "background";
+const NOTIFICATION_DOWNLOAD: &str = "download";
+
+/// Mostra a janela, inclusive quando ela está escondida em segundo plano.
+fn present(ui: &Ui) {
+    ui.window.set_visible(true);
+    ui.window.present();
+}
+
+/// Encerra o aplicativo de verdade, mesmo com a bandeja ativa.
+fn quit(ui: &Ui) {
+    if let Some(job) = ui.job.borrow().as_ref() {
+        job.cancel();
+    }
+    ui.tray.replace(None);
+    ui.window.destroy();
+}
+
+/// Envia uma notificação do sistema; clicar nela mostra a janela.
+fn notify(ui: &Ui, id: &str, title: &str, body: &str) {
+    let Some(app) = ui.window.application() else {
+        return;
+    };
+    let notification = gio::Notification::new(title);
+    notification.set_body(Some(body));
+    notification.set_default_action("app.present");
+    app.send_notification(Some(id), &notification);
+}
+
+/// Aplica aos seletores da janela os padrões definidos nas preferências.
+/// Não mexe em nada durante um download.
+pub(crate) fn apply_download_defaults(ui: &Ui) {
+    if ui.job.borrow().is_some() {
+        return;
+    }
+    let settings = ui.settings.borrow().clone();
+    ui.kind_row.set_selected(match settings.kind {
+        Kind::Video => 0,
+        Kind::Audio => 1,
+    });
+    ui.quality_row
+        .set_selected(quality_index(settings.max_height));
+    ui.quality_row.set_sensitive(settings.kind == Kind::Video);
+    set_folder(ui, settings.download_folder());
+}
+
+/// Cria o ícone na bandeja, se ainda não existir.
+pub(crate) async fn start_tray(ui: &Rc<Ui>) -> Result<(), String> {
+    if ui.tray.borrow().is_some() {
+        return Ok(());
+    }
+    let tray = tray::Tray::start(ui.tray_commands.clone()).await?;
+    ui.tray.replace(Some(tray));
+    // Força o envio do estado atual ao ícone recém-criado.
+    let (busy, status) = ui.tray_status.replace((false, String::new()));
+    set_tray_status(ui, busy, &status);
+    Ok(())
+}
+
+/// Remove o ícone da bandeja.
+pub(crate) fn stop_tray(ui: &Ui) {
+    ui.tray.replace(None);
+    // Sem o ícone, uma janela escondida e ociosa ficaria inalcançável.
+    if !ui.window.is_visible() && ui.job.borrow().is_none() {
+        present(ui);
+    }
+}
+
+/// Atualiza o estado mostrado no menu da bandeja.
+fn set_tray_status(ui: &Ui, busy: bool, status: &str) {
+    let state = (busy, status.to_string());
+    if *ui.tray_status.borrow() == state {
+        return;
+    }
+    if let Some(tray) = ui.tray.borrow().as_ref() {
+        tray.set_status(busy, status);
+    }
+    ui.tray_status.replace(state);
 }
 
 fn toast(ui: &Ui, message: &str) {
@@ -545,6 +741,7 @@ fn start_download(ui: &Rc<Ui>) {
     ui.progress_box.set_visible(true);
     set_busy(ui, true);
     start_pulse(ui);
+    set_tray_status(ui, true, &gettext("Fetching information…"));
 
     let ui = ui.clone();
     glib::spawn_future_local(async move {
@@ -569,6 +766,8 @@ fn handle_event(ui: &Rc<Ui>, event: Event) {
                 &gettext("Downloading — {percent}%"),
                 &[("percent", &percent)],
             );
+            // A bandeja recebe só a porcentagem, que muda poucas vezes.
+            set_tray_status(ui, true, &text);
             if !speed.is_empty() {
                 text.push_str(&format!(" · {speed}"));
             }
@@ -582,6 +781,7 @@ fn handle_event(ui: &Rc<Ui>, event: Event) {
             ui.status_label
                 .set_text(&gettext("Processing with FFmpeg…"));
             start_pulse(ui);
+            set_tray_status(ui, true, &gettext("Processing with FFmpeg…"));
         }
         Event::File(path) => {
             ui.last_file.replace(Some(path));
@@ -595,12 +795,30 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
     ui.pulsing.set(false);
     set_busy(ui, false);
     refresh_deps(ui);
+    set_tray_status(ui, false, "");
+
+    // Com a janela escondida ou fora de foco, o resultado vai também para
+    // uma notificação do sistema.
+    let hidden = !ui.window.is_visible();
+    let unattended = hidden || !ui.window.is_active();
+    if let Some(app) = ui.window.application() {
+        app.withdraw_notification(NOTIFICATION_BACKGROUND);
+    }
+    ui.background_notified.set(false);
 
     match outcome {
         Outcome::Done => {
             ui.progress_bar.set_fraction(1.0);
             ui.status_label.set_text(&gettext("Done"));
             ui.url_row.set_text("");
+            if unattended {
+                notify(
+                    ui,
+                    NOTIFICATION_DOWNLOAD,
+                    &gettext("Download finished"),
+                    &ui.title_label.text(),
+                );
+            }
 
             let done = adw::Toast::new(&gettext("Download finished"));
             if let Some(path) = ui.last_file.borrow().clone() {
@@ -627,8 +845,35 @@ fn finish(ui: &Rc<Ui>, outcome: Outcome) {
         Outcome::Failed(message) => {
             ui.progress_bar.set_fraction(0.0);
             ui.status_label.set_text(&gettext("Failed"));
-            show_error(ui, &gettext("The download failed"), &message);
+            if unattended {
+                notify(
+                    ui,
+                    NOTIFICATION_DOWNLOAD,
+                    &gettext("The download failed"),
+                    &message,
+                );
+            }
+            if !hidden {
+                show_error(ui, &gettext("The download failed"), &message);
+            }
         }
+    }
+
+    // Escondido e sem bandeja, não há mais o que fazer em segundo plano. A
+    // pequena espera dá tempo de a notificação ser entregue.
+    if hidden && ui.tray.borrow().is_none() {
+        glib::timeout_add_local_once(
+            Duration::from_millis(500),
+            clone!(
+                #[weak]
+                ui,
+                move || {
+                    if !ui.window.is_visible() && ui.job.borrow().is_none() {
+                        ui.window.destroy();
+                    }
+                }
+            ),
+        );
     }
 }
 

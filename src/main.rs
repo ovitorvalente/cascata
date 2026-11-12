@@ -3,12 +3,20 @@ mod config;
 mod deps;
 mod downloader;
 mod i18n;
+mod preferences;
+mod settings;
+mod tray;
 mod window;
 
 use adw::prelude::*;
 use gtk::glib;
 
 fn main() -> glib::ExitCode {
+    // O idioma escolhido nas preferências vale para o gettext e para o GTK.
+    // Precisa ser definido antes de o GTK iniciar e de existir outra thread.
+    if let Some(code) = settings::Settings::load().language.code() {
+        std::env::set_var("LANGUAGE", code);
+    }
     i18n::init();
 
     let app = adw::Application::builder()
@@ -17,7 +25,8 @@ fn main() -> glib::ExitCode {
 
     app.connect_activate(|app| {
         // Uma única janela: se já existir, apenas traz para frente.
-        if let Some(window) = app.active_window() {
+        // (ela pode estar escondida, com um download em segundo plano).
+        if let Some(window) = app.windows().first() {
             window.present();
         } else {
             window::build(app);

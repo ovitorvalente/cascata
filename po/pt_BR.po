@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: cascata 0.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 17:02+0000\n"
+"POT-Creation-Date: 2026-11-12 17:30+0000\n"
 "PO-Revision-Date: 2026-11-12 17:00+0000\n"
 "Last-Translator: Vitor Valente\n"
 "Language-Team: Brazilian Portuguese\n"
@@ -119,99 +119,242 @@ msgstr "O gerenciador de pacotes terminou com erro."
 msgid "yt-dlp exited with an error."
 msgstr "O yt-dlp terminou com erro."
 
-#: src/window.rs:33
+#: src/preferences.rs:21
+msgid "Language"
+msgstr "Idioma"
+
+#: src/preferences.rs:22
+msgid "Takes effect the next time Cascata starts"
+msgstr "Passa a valer na próxima vez que o Cascata for aberto"
+
+#: src/preferences.rs:24
+msgid "System default"
+msgstr "Padrão do sistema"
+
+#: src/preferences.rs:33
+msgid "General"
+msgstr "Geral"
+
+#: src/preferences.rs:39 src/window.rs:136
+msgid "Format"
+msgstr "Formato"
+
+#: src/preferences.rs:41 src/window.rs:138
+msgid "Video (MP4)"
+msgstr "Vídeo (MP4)"
+
+#: src/preferences.rs:42 src/window.rs:139
+msgid "Audio only (MP3)"
+msgstr "Somente áudio (MP3)"
+
+#: src/preferences.rs:56 src/window.rs:146
+msgid "Quality"
+msgstr "Qualidade"
+
+#: src/preferences.rs:64 src/window.rs:157
+msgid "Choose folder"
+msgstr "Escolher pasta"
+
+#: src/preferences.rs:69 src/preferences.rs:179 src/window.rs:162
+#: src/window.rs:666
+msgid "Destination folder"
+msgstr "Pasta de destino"
+
+#: src/preferences.rs:77
+msgid "Downloads"
+msgstr "Downloads"
+
+#: src/preferences.rs:78
+msgid "Initial choices for new downloads"
+msgstr "Escolhas iniciais para novos downloads"
+
+#: src/preferences.rs:86
+msgid "Keep downloading in the background"
+msgstr "Continuar baixando em segundo plano"
+
+#: src/preferences.rs:88
+msgid ""
+"Closing the window does not stop a download; a notification tells you when "
+"it finishes"
+msgstr ""
+"Fechar a janela não interrompe o download; uma notificação avisa quando ele "
+"termina"
+
+#: src/preferences.rs:93
+msgid "Tray icon"
+msgstr "Ícone na bandeja"
+
+#: src/preferences.rs:95
+msgid "Keep Cascata in the system tray after the window is closed"
+msgstr "Mantém o Cascata na bandeja do sistema depois que a janela é fechada"
+
+#: src/preferences.rs:101
+msgid "Background"
+msgstr "Segundo plano"
+
+#: src/preferences.rs:112 src/window.rs:97
+msgid "Preferences"
+msgstr "Preferências"
+
+#: src/preferences.rs:130
+msgid "Restart Cascata to apply the language"
+msgstr "Reinicie o Cascata para aplicar o idioma"
+
+#: src/preferences.rs:254
+msgid "Could not save the preferences:"
+msgstr "Não foi possível salvar as preferências:"
+
+#: src/preferences.rs:261 src/window.rs:905
+msgid "Close"
+msgstr "Fechar"
+
+#: src/preferences.rs:270
+msgid "Install the tray extension?"
+msgstr "Instalar a extensão de bandeja?"
+
+#: src/preferences.rs:272
+msgid ""
+"GNOME does not show tray icons on its own. Cascata can install and enable "
+"the “AppIndicator and KStatusNotifierItem Support” extension from "
+"extensions.gnome.org. GNOME will ask you to confirm the installation."
+msgstr ""
+"O GNOME não mostra ícones de bandeja por conta própria. O Cascata pode "
+"instalar e ativar a extensão “AppIndicator and KStatusNotifierItem Support”, "
+"do extensions.gnome.org. O GNOME vai pedir que você confirme a instalação."
+
+#: src/preferences.rs:278 src/window.rs:205 src/window.rs:628
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/preferences.rs:278
+msgid "Install and enable"
+msgstr "Instalar e ativar"
+
+#: src/preferences.rs:289
+msgid "Waiting for GNOME to install the extension…"
+msgstr "Aguardando o GNOME instalar a extensão…"
+
+#: src/preferences.rs:297
+msgid "The tray is not available yet"
+msgstr "A bandeja ainda não está disponível"
+
+#: src/preferences.rs:299
+msgid ""
+"The extension is installed, but GNOME has not started it. Log out and log in "
+"again, then turn this option on."
+msgstr ""
+"A extensão está instalada, mas o GNOME ainda não a iniciou. Encerre a "
+"sessão, entre novamente e ative esta opção."
+
+#: src/preferences.rs:309
+msgid ""
+"You can install “AppIndicator and KStatusNotifierItem Support” yourself from "
+"extensions.gnome.org."
+msgstr ""
+"Você pode instalar a “AppIndicator and KStatusNotifierItem Support” por "
+"conta própria em extensions.gnome.org."
+
+#: src/preferences.rs:314
+msgid "Could not install the extension"
+msgstr "Não foi possível instalar a extensão"
+
+#: src/preferences.rs:325
+msgid "Could not create the tray icon"
+msgstr "Não foi possível criar o ícone na bandeja"
+
+#: src/tray.rs:78
+msgid "Open Cascata"
+msgstr "Abrir o Cascata"
+
+#: src/tray.rs:96
+msgid "Cancel download"
+msgstr "Cancelar download"
+
+#: src/tray.rs:107
+msgid "Quit"
+msgstr "Sair"
+
+#: src/tray.rs:138
+msgid "The tray icon could not be created."
+msgstr "Não foi possível criar o ícone na bandeja."
+
+#: src/tray.rs:251
+msgid "GNOME Shell could not enable the extension."
+msgstr "O GNOME Shell não conseguiu ativar a extensão."
+
+#: src/window.rs:36
 msgid "Best available"
 msgstr "Melhor disponível"
 
-#: src/window.rs:43
+#: src/window.rs:54
 #, rust-format
 msgid "{first} and {second}"
 msgstr "{first} e {second}"
 
-#: src/window.rs:78
+#: src/window.rs:101
 msgid "Check dependencies"
 msgstr "Verificar dependências"
 
-#: src/window.rs:81
+#: src/window.rs:104
 msgid "About Cascata"
 msgstr "Sobre o Cascata"
 
-#: src/window.rs:85
+#: src/window.rs:108
 msgid "Main menu"
 msgstr "Menu principal"
 
-#: src/window.rs:98
+#: src/window.rs:121
 msgid "Video address"
 msgstr "Endereço do vídeo"
 
-#: src/window.rs:103
+#: src/window.rs:126
 msgid "Paste"
 msgstr "Colar"
 
-#: src/window.rs:113
-msgid "Format"
-msgstr "Formato"
-
-#: src/window.rs:115
-msgid "Video (MP4)"
-msgstr "Vídeo (MP4)"
-
-#: src/window.rs:116
-msgid "Audio only (MP3)"
-msgstr "Somente áudio (MP3)"
-
-#: src/window.rs:123
-msgid "Quality"
-msgstr "Qualidade"
-
-#: src/window.rs:128
+#: src/window.rs:151
 msgid "Download the whole playlist"
 msgstr "Baixar a playlist inteira"
 
-#: src/window.rs:129
+#: src/window.rs:152
 msgid "When the address is part of a playlist"
 msgstr "Quando o endereço fizer parte de uma playlist"
 
-#: src/window.rs:134
-msgid "Choose folder"
-msgstr "Escolher pasta"
-
-#: src/window.rs:139 src/window.rs:470
-msgid "Destination folder"
-msgstr "Pasta de destino"
-
-#: src/window.rs:146
+#: src/window.rs:169
 msgid "Options"
 msgstr "Opções"
 
-#: src/window.rs:177
+#: src/window.rs:200
 msgid "Download"
 msgstr "Baixar"
 
-#: src/window.rs:182 src/window.rs:432
-msgid "Cancel"
-msgstr "Cancelar"
-
-#: src/window.rs:309
+#: src/window.rs:337
 msgid "Cancelling…"
 msgstr "Cancelando…"
 
-#: src/window.rs:350
+#: src/window.rs:365
+msgid "The download continues in the background"
+msgstr "O download continua em segundo plano"
+
+#: src/window.rs:366
+msgid "Cascata will notify you when it finishes."
+msgstr "O Cascata avisa quando ele terminar."
+
+#: src/window.rs:411
 msgid "yt-dlp and FFmpeg are installed"
 msgstr "yt-dlp e FFmpeg estão instalados"
 
-#: src/window.rs:392
+#: src/window.rs:588
 #, rust-format
 msgid "{tools} is not installed"
 msgid_plural "{tools} are not installed"
 msgstr[0] "{tools} não está instalado"
 msgstr[1] "{tools} não estão instalados"
 
-#: src/window.rs:397 src/window.rs:432
+#: src/window.rs:593 src/window.rs:628
 msgid "Install"
 msgstr "Instalar"
 
-#: src/window.rs:400
+#: src/window.rs:596
 #, rust-format
 msgid ""
 "{tools} is not installed. Install it with your system's package manager."
@@ -224,7 +367,7 @@ msgstr[1] ""
 "{tools} não estão instalados. Instale pelo gerenciador de pacotes do seu "
 "sistema."
 
-#: src/window.rs:424
+#: src/window.rs:620
 #, rust-format
 msgid ""
 "Cascata needs {tools} to work. The command below will run as administrator "
@@ -237,23 +380,23 @@ msgstr ""
 "\n"
 "{command}"
 
-#: src/window.rs:431
+#: src/window.rs:627
 msgid "Install dependencies?"
 msgstr "Instalar dependências?"
 
-#: src/window.rs:443
+#: src/window.rs:639
 msgid "Installing dependencies…"
 msgstr "Instalando dependências…"
 
-#: src/window.rs:452
+#: src/window.rs:648
 msgid "Dependencies installed"
 msgstr "Dependências instaladas"
 
-#: src/window.rs:455
+#: src/window.rs:651
 msgid "Installation incomplete"
 msgstr "Instalação incompleta"
 
-#: src/window.rs:457
+#: src/window.rs:653
 msgid ""
 "The package manager finished, but the tools still could not be found in the "
 "PATH."
@@ -261,68 +404,64 @@ msgstr ""
 "O gerenciador de pacotes terminou, mas as ferramentas ainda não foram "
 "encontradas no PATH."
 
-#: src/window.rs:461
+#: src/window.rs:657
 msgid "Could not install"
 msgstr "Não foi possível instalar"
 
-#: src/window.rs:498
+#: src/window.rs:694
 msgid "Enter the video address"
 msgstr "Informe o endereço do vídeo"
 
-#: src/window.rs:505
+#: src/window.rs:701
 msgid "The address must start with http:// or https://"
 msgstr "O endereço precisa começar com http:// ou https://"
 
-#: src/window.rs:534
+#: src/window.rs:730
 msgid "Could not start yt-dlp"
 msgstr "Não foi possível iniciar o yt-dlp"
 
-#: src/window.rs:542
+#: src/window.rs:738 src/window.rs:744
 msgid "Fetching information…"
 msgstr "Obtendo informações…"
 
-#: src/window.rs:543
+#: src/window.rs:739
 msgid "Connecting…"
 msgstr "Conectando…"
 
-#: src/window.rs:569
+#: src/window.rs:766
 #, rust-format
 msgid "Downloading — {percent}%"
 msgstr "Baixando — {percent}%"
 
-#: src/window.rs:577
+#: src/window.rs:776
 #, rust-format
 msgid "{time} left"
 msgstr "restam {time}"
 
-#: src/window.rs:583
+#: src/window.rs:782 src/window.rs:784
 msgid "Processing with FFmpeg…"
 msgstr "Processando com o FFmpeg…"
 
-#: src/window.rs:602
+#: src/window.rs:812
 msgid "Done"
 msgstr "Concluído"
 
-#: src/window.rs:605
+#: src/window.rs:818 src/window.rs:823
 msgid "Download finished"
 msgstr "Download concluído"
 
-#: src/window.rs:607
+#: src/window.rs:825
 msgid "Show in folder"
 msgstr "Mostrar na pasta"
 
-#: src/window.rs:625
+#: src/window.rs:843
 msgid "Cancelled"
 msgstr "Cancelado"
 
-#: src/window.rs:629
+#: src/window.rs:847
 msgid "Failed"
 msgstr "Falhou"
 
-#: src/window.rs:630
+#: src/window.rs:852 src/window.rs:857
 msgid "The download failed"
 msgstr "O download falhou"
-
-#: src/window.rs:660
-msgid "Close"
-msgstr "Fechar"
