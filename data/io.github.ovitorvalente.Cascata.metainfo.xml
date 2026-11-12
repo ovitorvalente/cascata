@@ -58,7 +58,13 @@
   <releases>
     <release version="0.1.0" date="2026-11-12">
       <description>
-        <p>First release.</p>
+        <p>First release of Cascata.</p>
+        <ul>
+          <li>Video in MP4 with a maximum resolution of your choice, from 360p to 4K</li>
+          <li>Audio only, converted to MP3</li>
+          <li>Whole playlist downloads</li>
+          <li>Installs yt-dlp and FFmpeg on Fedora and Ubuntu</li>
+        </ul>
       </description>
     </release>
   </releases>

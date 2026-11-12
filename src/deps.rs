@@ -37,6 +37,39 @@ pub fn check() -> Status {
     }
 }
 
+/// Primeira linha da saída de `<programa> <argumento>`, usada para descobrir
+/// a versão de uma ferramenta. `None` se ela não puder ser executada.
+pub fn tool_version(program: &str, arg: &str) -> Option<String> {
+    let output = Command::new(program)
+        .arg(arg)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().next()?.trim();
+    (!line.is_empty()).then(|| line.to_string())
+}
+
+/// Nome legível do sistema, como "Fedora Linux 44 (Workstation Edition)".
+pub fn os_pretty_name() -> Option<String> {
+    let content = fs::read_to_string("/etc/os-release")
+        .or_else(|_| fs::read_to_string("/usr/lib/os-release"))
+        .ok()?;
+    parse_pretty_name(&content)
+}
+
+fn parse_pretty_name(content: &str) -> Option<String> {
+    content.lines().find_map(|line| {
+        let value = line.strip_prefix("PRETTY_NAME=")?;
+        let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+        (!value.is_empty()).then(|| value.to_string())
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Distro {
     Fedora,
@@ -192,6 +225,16 @@ mod tests {
             parse_os_release("ID=linuxmint\nID_LIKE=\"ubuntu debian\"\n"),
             Distro::Ubuntu
         );
+    }
+
+    #[test]
+    fn reads_pretty_name() {
+        let os = "NAME=\"Fedora Linux\"\nPRETTY_NAME=\"Fedora Linux 44 (Workstation Edition)\"\n";
+        assert_eq!(
+            parse_pretty_name(os).as_deref(),
+            Some("Fedora Linux 44 (Workstation Edition)")
+        );
+        assert_eq!(parse_pretty_name("ID=fedora\n"), None);
     }
 
     #[test]

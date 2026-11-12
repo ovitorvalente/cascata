@@ -9,6 +9,7 @@ use adw::prelude::*;
 use gtk::glib::clone;
 use gtk::{gio, glib};
 
+use crate::about;
 use crate::config;
 use crate::deps;
 use crate::downloader::{self, Event, Kind, Outcome, Request};
@@ -308,7 +309,7 @@ pub fn build(app: &adw::Application) {
     about_action.connect_activate(clone!(
         #[weak]
         ui,
-        move |_, _| show_about(&ui)
+        move |_, _| about::show(&ui.window)
     ));
     ui.window.add_action(&about_action);
 
@@ -613,26 +614,4 @@ fn show_error(ui: &Ui, heading: &str, message: &str) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(message));
     dialog.add_response("close", "Fechar");
     dialog.present(Some(&ui.window));
-}
-
-fn show_about(ui: &Ui) {
-    let about = adw::AboutDialog::builder()
-        .application_name(config::APP_NAME)
-        .application_icon(config::APP_ID)
-        .version(config::VERSION)
-        .developer_name("Colaboradores do Cascata")
-        .comments(
-            "Baixe vídeos e áudios da internet. Interface para o yt-dlp e o \
-             FFmpeg feita com GTK 4 e libadwaita.",
-        )
-        .license_type(gtk::License::MitX11)
-        .build();
-    about.add_acknowledgement_section(
-        Some("Ferramentas utilizadas"),
-        &[
-            "yt-dlp https://github.com/yt-dlp/yt-dlp",
-            "FFmpeg https://ffmpeg.org",
-        ],
-    );
-    about.present(Some(&ui.window));
 }

@@ -91,9 +91,10 @@ CASCATA_TEST_URL="https://…" CASCATA_TEST_KIND=audio \
 ```
 src/main.rs        aplicação (adw::Application)
 src/window.rs      janela e interface (libadwaita)
+src/about.rs       diálogo "Sobre" e informações de depuração
 src/downloader.rs  executa o yt-dlp e traduz a saída em eventos
 src/deps.rs        detecção e instalação do yt-dlp e do FFmpeg
-src/config.rs      ID e nome do aplicativo
+src/config.rs      ID, nome e endereços do projeto
 data/              .desktop, metainfo (AppStream) e ícone
 ```
 
