@@ -268,7 +268,7 @@ pub fn build(app: &adw::Application) {
         .title(config::APP_NAME)
         .icon_name(config::APP_ID)
         .default_width(520)
-        .default_height(640)
+        .default_height(780)
         .content(&toolbar_view)
         .build();
 
