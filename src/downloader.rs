@@ -114,9 +114,17 @@ fn build_args(req: &Request) -> Vec<String> {
         }
         Kind::Audio => {
             args.extend(
-                ["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0"]
-                    .iter()
-                    .map(|s| s.to_string()),
+                [
+                    "-f",
+                    "ba/b",
+                    "-x",
+                    "--audio-format",
+                    "mp3",
+                    "--audio-quality",
+                    "0",
+                ]
+                .iter()
+                .map(|s| s.to_string()),
             );
         }
     }
@@ -192,8 +200,14 @@ pub fn start(req: Request) -> io::Result<(Handle, async_channel::Receiver<Event>
         .process_group(0)
         .spawn()?;
 
-    let stdout = child.stdout.take().expect("stdout foi configurado como pipe");
-    let mut stderr = child.stderr.take().expect("stderr foi configurado como pipe");
+    let stdout = child
+        .stdout
+        .take()
+        .expect("stdout foi configurado como pipe");
+    let mut stderr = child
+        .stderr
+        .take()
+        .expect("stderr foi configurado como pipe");
 
     let cancelled = Arc::new(AtomicBool::new(false));
     let handle = Handle {

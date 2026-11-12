@@ -201,8 +201,8 @@ pub fn build(app: &adw::Application) {
         .content(&toolbar_view)
         .build();
 
-    let default_folder = glib::user_special_dir(glib::UserDirectory::Downloads)
-        .unwrap_or_else(glib::home_dir);
+    let default_folder =
+        glib::user_special_dir(glib::UserDirectory::Downloads).unwrap_or_else(glib::home_dir);
 
     let ui = Rc::new(Ui {
         window,
@@ -629,7 +629,10 @@ fn show_about(ui: &Ui) {
         .build();
     about.add_acknowledgement_section(
         Some("Ferramentas utilizadas"),
-        &["yt-dlp https://github.com/yt-dlp/yt-dlp", "FFmpeg https://ffmpeg.org"],
+        &[
+            "yt-dlp https://github.com/yt-dlp/yt-dlp",
+            "FFmpeg https://ffmpeg.org",
+        ],
     );
     about.present(Some(&ui.window));
 }
